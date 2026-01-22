@@ -10,14 +10,14 @@ public class MinMax: AI
         this.depth = depth;
     }
 
-    public int GetBestMove(Player currentPlayer, Board board)
+    public int GetBestMove(Player currentPlayer, Connect4Board connect4Board)
     {
         int bestMove = 0;
         double bestScore = Connect4Utils.NEG_INF;
 
-        foreach (int move in board.GetValidMoves())
+        foreach (int move in connect4Board.GetValidMoves())
         {
-            Board child = new Board(board.Table);
+            Connect4Board child = new Connect4Board(connect4Board.Table);
             child.SetPiece(move, currentPlayer.Alliance);
             double score = minmax(child, depth - 1, currentPlayer, currentPlayer);
             
@@ -31,11 +31,11 @@ public class MinMax: AI
         return bestMove;
     }
 
-    private double minmax(Board node, int depth, Player maximizingPlayer, Player currentPlayer)
+    private double minmax(Connect4Board node, int depth, Player maximizingPlayer, Player currentPlayer)
     {
         if(depth == 0)
         {
-            return BoardUtils.EvaluateBoard(node, currentPlayer.Alliance);
+            return Board4Utils.EvaluateBoard(node, currentPlayer.Alliance);
         }
 
         if(maximizingPlayer.Alliance == currentPlayer.Alliance)
@@ -43,7 +43,7 @@ public class MinMax: AI
             double value = Connect4Utils.NEG_INF;
             foreach(int move in node.GetValidMoves())
             {
-                Board child = new Board(node.Table);
+                Connect4Board child = new Connect4Board(node.Table);
                 child.SetPiece(move, currentPlayer.Alliance);
                 Player newCurrentPlayer = new Player(PlayerType.COMPUTER, currentPlayer.Alliance == PlayerAlliance.RED ? PlayerAlliance.BLACK : PlayerAlliance.RED);
                 value = Math.Max(value, minmax(child, depth - 1, maximizingPlayer, newCurrentPlayer));
@@ -55,7 +55,7 @@ public class MinMax: AI
             double value = Connect4Utils.INF;
             foreach (int move in node.GetValidMoves())
             {
-                Board child = new Board(node.Table);
+                Connect4Board child = new Connect4Board(node.Table);
                 child.SetPiece(move, currentPlayer.Alliance);
                 Player newCurrentPlayer = new Player(PlayerType.COMPUTER, currentPlayer.Alliance == PlayerAlliance.RED ? PlayerAlliance.BLACK : PlayerAlliance.RED);
                 value = Math.Min(value, minmax(child, depth - 1, maximizingPlayer, newCurrentPlayer));

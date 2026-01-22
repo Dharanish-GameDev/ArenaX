@@ -10,17 +10,17 @@ using UnityEngine;
 /// </summary>
 public class Memento
 {
-    public Memento(Player currentPlayer, Board board, GameObject piece)
+    public Memento(Player currentPlayer, Connect4Board connect4Board, GameObject piece)
     {
         CurrentPlayer = currentPlayer;
       
         Piece = piece;
-        Board = new Board(board.Table);
+        Connect4Board = new Connect4Board(connect4Board.Table);
     }
 
     #region Properties
     public Player CurrentPlayer { get; }
-    public Board Board { get; }
+    public Connect4Board Connect4Board { get; }
 
     public GameObject Piece { get; }
     #endregion

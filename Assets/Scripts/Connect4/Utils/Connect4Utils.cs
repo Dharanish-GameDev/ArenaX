@@ -13,24 +13,24 @@ class Connect4Utils
     /// <summary>
     /// Function which checks if the game is finished
     /// </summary>
-    /// <param name="board">board to be checked</param>
+    /// <param name="connect4Board">board to be checked</param>
     /// <returns></returns>
-    public static bool Finished(Board board)
+    public static bool Finished(Connect4Board connect4Board)
     {
-        return FinishedVertically(board) || FinishedHorizontally(board) || FinishedDiagonal(board);
+        return FinishedVertically(connect4Board) || FinishedHorizontally(connect4Board) || FinishedDiagonal(connect4Board);
     }
 
     /// <summary>
     /// Function to check if the game is done on a vertical line
     /// </summary>
-    /// <param name="board"></param>
+    /// <param name="connect4Board"></param>
     /// <returns></returns>
-    private static bool FinishedVertically(Board board)
+    private static bool FinishedVertically(Connect4Board connect4Board)
     {
-        var table = board.Table;
-        for(int col = 0; col < BoardUtils.NUM_COLS; col++)
+        var table = connect4Board.Table;
+        for(int col = 0; col < Board4Utils.NUM_COLS; col++)
         {
-            for(int row = 0; row < BoardUtils.NUM_ROWS - 3; row++)
+            for(int row = 0; row < Board4Utils.NUM_ROWS - 3; row++)
             {
                 if(table[row, col] == table[row + 1, col] && table[row + 1, col] == table[row + 2, col] && table[row + 2, col] == table[row + 3, col] && table[row, col] != Tile.EMPTY)
                 {
@@ -44,14 +44,14 @@ class Connect4Utils
     /// <summary>
     /// Function to check if the game is done on a horizontal line
     /// </summary>
-    /// <param name="board"></param>
+    /// <param name="connect4Board"></param>
     /// <returns></returns>
-    private static bool FinishedHorizontally(Board board)
+    private static bool FinishedHorizontally(Connect4Board connect4Board)
     {
-        var table = board.Table;
-        for(int row = 0; row < BoardUtils.NUM_ROWS; row++)
+        var table = connect4Board.Table;
+        for(int row = 0; row < Board4Utils.NUM_ROWS; row++)
         {
-            for(int col = 0; col < BoardUtils.NUM_COLS - 3; col++)
+            for(int col = 0; col < Board4Utils.NUM_COLS - 3; col++)
             {
                 if(table[row, col] == table[row, col + 1] && table[row, col + 1] == table[row, col + 2] && table[row, col + 2] == table[row, col + 3] && table[row, col] != Tile.EMPTY)
                 {
@@ -65,23 +65,23 @@ class Connect4Utils
     /// <summary>
     /// Function to check if te game is done on diagonal
     /// </summary>
-    /// <param name="board"></param>
+    /// <param name="connect4Board"></param>
     /// <returns></returns>
-    private static bool FinishedDiagonal(Board board)
+    private static bool FinishedDiagonal(Connect4Board connect4Board)
     {
-        var table = board.Table;
-        for(int row = 0; row < BoardUtils.NUM_ROWS; row++)
+        var table = connect4Board.Table;
+        for(int row = 0; row < Board4Utils.NUM_ROWS; row++)
         {
-            for(int col = 0; col < BoardUtils.NUM_COLS; col++)
+            for(int col = 0; col < Board4Utils.NUM_COLS; col++)
             {
-                if(row + 3 < BoardUtils.NUM_ROWS && col + 3 < BoardUtils.NUM_COLS)
+                if(row + 3 < Board4Utils.NUM_ROWS && col + 3 < Board4Utils.NUM_COLS)
                 {
                     if(table[row, col] == table[row + 1, col + 1] && table[row + 1, col + 1] == table[row + 2, col + 2] && table[row + 2, col + 2] == table[row + 3, col + 3] && table[row, col] != Tile.EMPTY)
                     {
                         return true;
                     }
                 }
-                if (row + 3 < BoardUtils.NUM_ROWS && col - 3 >= 0)
+                if (row + 3 < Board4Utils.NUM_ROWS && col - 3 >= 0)
                 {
                     if (table[row, col] == table[row + 1, col - 1] && table[row + 1, col - 1] == table[row + 2, col - 2] && table[row + 2, col - 2] == table[row + 3, col - 3] && table[row, col] != Tile.EMPTY)
                     {
@@ -93,17 +93,17 @@ class Connect4Utils
         return false;
     }
 
-    public static EndGameCoordintaes GetEndGameCoordinates(Board board)
+    public static EndGameCoordintaes GetEndGameCoordinates(Connect4Board connect4Board)
     {
-        if (!Finished(board))
+        if (!Finished(connect4Board))
         {
             throw new GameNotFinishedException();
         }
 
-        var table = board.Table;
-        for (int col = 0; col < BoardUtils.NUM_COLS; col++)
+        var table = connect4Board.Table;
+        for (int col = 0; col < Board4Utils.NUM_COLS; col++)
         {
-            for (int row = 0; row < BoardUtils.NUM_ROWS - 3; row++)
+            for (int row = 0; row < Board4Utils.NUM_ROWS - 3; row++)
             {
                 if (table[row, col] == table[row + 1, col] && table[row + 1, col] == table[row + 2, col] && table[row + 2, col] == table[row + 3, col] && table[row, col] != Tile.EMPTY)
                 {
@@ -112,9 +112,9 @@ class Connect4Utils
             }
         }
 
-        for (int row = 0; row < BoardUtils.NUM_ROWS; row++)
+        for (int row = 0; row < Board4Utils.NUM_ROWS; row++)
         {
-            for (int col = 0; col < BoardUtils.NUM_COLS - 3; col++)
+            for (int col = 0; col < Board4Utils.NUM_COLS - 3; col++)
             {
                 if (table[row, col] == table[row, col + 1] && table[row, col + 1] == table[row, col + 2] && table[row, col + 2] == table[row, col + 3] && table[row, col] != Tile.EMPTY)
                 {
@@ -123,18 +123,18 @@ class Connect4Utils
             }
         }
 
-        for (int row = 0; row < BoardUtils.NUM_ROWS; row++)
+        for (int row = 0; row < Board4Utils.NUM_ROWS; row++)
         {
-            for (int col = 0; col < BoardUtils.NUM_COLS; col++)
+            for (int col = 0; col < Board4Utils.NUM_COLS; col++)
             {
-                if (row + 3 < BoardUtils.NUM_ROWS && col + 3 < BoardUtils.NUM_COLS)
+                if (row + 3 < Board4Utils.NUM_ROWS && col + 3 < Board4Utils.NUM_COLS)
                 {
                     if (table[row, col] == table[row + 1, col + 1] && table[row + 1, col + 1] == table[row + 2, col + 2] && table[row + 2, col + 2] == table[row + 3, col + 3] && table[row, col] != Tile.EMPTY)
                     {
                         return new EndGameCoordintaes(col, col + 3, row, row + 3);
                     }
                 }
-                if (row + 3 < BoardUtils.NUM_ROWS && col - 3 >= 0)
+                if (row + 3 < Board4Utils.NUM_ROWS && col - 3 >= 0)
                 {
                     if (table[row, col] == table[row + 1, col - 1] && table[row + 1, col - 1] == table[row + 2, col - 2] && table[row + 2, col - 2] == table[row + 3, col - 3] && table[row, col] != Tile.EMPTY)
                     {

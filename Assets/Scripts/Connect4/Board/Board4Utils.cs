@@ -2,7 +2,7 @@
 /// <summary>
 /// Class for board utilitaries
 /// </summary>
-public class BoardUtils
+public class Board4Utils
 {
     //board dimensions
     public static readonly int NUM_ROWS = 6;
@@ -39,12 +39,12 @@ public class BoardUtils
     /// <summary>
     /// Function to evaluate a board from the given player perspective
     /// </summary>
-    /// <param name="board"></param>
+    /// <param name="connect4Board"></param>
     /// <param name="player"></param>
     /// <returns></returns>
-    public static double EvaluateBoard(Board board, PlayerAlliance alliance)
+    public static double EvaluateBoard(Connect4Board connect4Board, PlayerAlliance alliance)
     {
-        if (Connect4Utils.Finished(board))
+        if (Connect4Utils.Finished(connect4Board))
         {
             return Connect4Utils.INF;
         }
@@ -54,13 +54,13 @@ public class BoardUtils
         {
             for (int j = 0; j < NUM_COLS; j++)
             {
-                if (board.Table[i, j] != Tile.EMPTY)
+                if (connect4Board.Table[i, j] != Tile.EMPTY)
                 {
-                    if (board.Table[i, j] == Tile.RED && alliance == PlayerAlliance.RED)
+                    if (connect4Board.Table[i, j] == Tile.RED && alliance == PlayerAlliance.RED)
                     {
                         score += evaluationBoard[i, j];
                     }
-                    else if (board.Table[i, j] == Tile.BLACK && alliance == PlayerAlliance.BLACK)
+                    else if (connect4Board.Table[i, j] == Tile.BLACK && alliance == PlayerAlliance.BLACK)
                     {
                         score += evaluationBoard[i, j];
                     }
