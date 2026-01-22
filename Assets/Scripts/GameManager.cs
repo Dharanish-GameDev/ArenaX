@@ -1,8 +1,9 @@
-﻿using UnityEngine;
-using UnityEngine.UI;
-using TMPro;
+﻿using System.Collections.Generic;
 using Photon.Pun;
 using Photon.Realtime;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
 using ExitGames.Client.Photon;
 
 public class GameManager : MonoBehaviourPunCallbacks
@@ -14,6 +15,9 @@ public class GameManager : MonoBehaviourPunCallbacks
         if (instance != null && instance != this) { Destroy(gameObject); return; }
         instance = this;
     }
+
+    // ✅ CONNECT 4
+    private const int WIN_COUNT = 4;
 
     [Header("Prefabs (Resources folder names)")]
     public string RedPiecePrefabName = "RedPiecePrefab";
@@ -41,7 +45,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     [SerializeField] private Image[] columnHighlights; // optional in inspector (size 7)
     [SerializeField] private Color columnHighlightColor = new Color(1f, 1f, 1f, 0.18f);
 
-    private RectTransform boardSpaceRoot; // parent space of row/col anchors
+    private RectTransform boardSpaceRoot;
     private bool isGameOver;
     private PlayerAlliance currentTurn = PlayerAlliance.RED;
     private bool localClickLock;
@@ -51,6 +55,16 @@ public class GameManager : MonoBehaviourPunCallbacks
     private const string PROP_TURN = "TURN";
     private const string PROP_BOARD = "BOARD";
     private const string PROP_READY = "READY";
+
+    // ✅ piece registry so we can glow specific discs (row,col)
+    private readonly Dictionary<int, Connect4Piece> pieceMap = new Dictionary<int, Connect4Piece>();
+    private int CellKey(int r, int c) => (r * 1000) + c;
+
+    public void RegisterPiece(int r, int c, Connect4Piece piece)
+    {
+        if (piece == null) return;
+        pieceMap[CellKey(r, c)] = piece;
+    }
 
     private void Start()
     {
@@ -188,17 +202,29 @@ public class GameManager : MonoBehaviourPunCallbacks
         {
             GameBoard.SetPiece(column, currentTurn);
 
-            // Turn ON highlight for everyone while it drops
             photonView.RPC(nameof(RPC_SetColumnHighlight), RpcTarget.All, column, true);
 
             SpawnPiece_MasterOnly(column, dropRow, currentTurn);
             SetBoardProperty();
 
             Tile placedTile = (currentTurn == PlayerAlliance.RED) ? Tile.RED : Tile.BLACK;
-            if (TryGetWinLineFromLastMove(dropRow, column, placedTile, out Vector2 aAnch, out Vector2 bAnch))
+
+            // ✅ WIN CHECK + winning cells for glow
+            if (TryGetWinningCellsFromLastMove(dropRow, column, placedTile, out List<Vector2Int> winCells, out Vector2 aAnch, out Vector2 bAnch))
             {
                 isGameOver = true;
 
+                // Glow winning discs on everyone
+                int[] rows = new int[winCells.Count];
+                int[] cols = new int[winCells.Count];
+                for (int i = 0; i < winCells.Count; i++)
+                {
+                    rows[i] = winCells[i].x;
+                    cols[i] = winCells[i].y;
+                }
+                photonView.RPC(nameof(RPC_GlowWinningPieces), RpcTarget.AllBuffered, rows, cols);
+
+                // Existing UI win line + winner
                 photonView.RPC(nameof(RPC_GameOverWithUILine), RpcTarget.AllBuffered,
                     (byte)currentTurn,
                     aAnch.x, aAnch.y,
@@ -300,7 +326,6 @@ public class GameManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        // show only one at a time
         for (int i = 0; i < columnHighlights.Length; i++)
             if (columnHighlights[i] != null) columnHighlights[i].gameObject.SetActive(false);
 
@@ -308,7 +333,22 @@ public class GameManager : MonoBehaviourPunCallbacks
             columnHighlights[column].gameObject.SetActive(true);
     }
 
-    // Called by Connect4Piece locally when it lands
+    // ✅ Glow RPC
+    [PunRPC]
+    private void RPC_GlowWinningPieces(int[] rows, int[] cols)
+    {
+        if (rows == null || cols == null || rows.Length != cols.Length) return;
+
+        for (int i = 0; i < rows.Length; i++)
+        {
+            int key = CellKey(rows[i], cols[i]);
+            if (pieceMap.TryGetValue(key, out Connect4Piece piece) && piece != null)
+            {
+                piece.SetGlow(true);
+            }
+        }
+    }
+
     public void ClearColumnHighlightLocal(int column)
     {
         if (isGameOver) return;
@@ -332,13 +372,13 @@ public class GameManager : MonoBehaviourPunCallbacks
         PhotonView parentPhotonView = piecesParent.GetComponent<PhotonView>();
         int parentViewID = parentPhotonView != null ? parentPhotonView.ViewID : 0;
 
-        // ✅ pass column as 4th element so the piece can clear highlight when it lands
+        // ✅ pass column + row so piece can register + clear highlight
         PhotonNetwork.InstantiateRoomObject(
             prefabName,
             Vector3.zero,
             Quaternion.identity,
             0,
-            new object[] { anchoredPosition.x, anchoredPosition.y, parentViewID, column }
+            new object[] { anchoredPosition.x, anchoredPosition.y, parentViewID, column, row }
         );
     }
 
@@ -351,10 +391,11 @@ public class GameManager : MonoBehaviourPunCallbacks
     }
 
     // ================================================================
-    // WIN CHECK (still 4)
+    // WIN CHECK + GET EXACT 4 CELLS (for glow)
     // ================================================================
-    private bool TryGetWinLineFromLastMove(int r, int c, Tile t, out Vector2 aAnch, out Vector2 bAnch)
+    private bool TryGetWinningCellsFromLastMove(int r, int c, Tile t, out List<Vector2Int> winCells, out Vector2 aAnch, out Vector2 bAnch)
     {
+        winCells = null;
         aAnch = Vector2.zero;
         bAnch = Vector2.zero;
 
@@ -368,6 +409,7 @@ public class GameManager : MonoBehaviourPunCallbacks
             int minR = r, minC = c;
             int maxR = r, maxC = c;
 
+            // go backward
             int rr = r - dr, cc = c - dc;
             while (IsInside(rr, cc) && GameBoard.Table[rr, cc] == t)
             {
@@ -375,6 +417,7 @@ public class GameManager : MonoBehaviourPunCallbacks
                 rr -= dr; cc -= dc;
             }
 
+            // go forward
             rr = r + dr; cc = c + dc;
             while (IsInside(rr, cc) && GameBoard.Table[rr, cc] == t)
             {
@@ -382,13 +425,42 @@ public class GameManager : MonoBehaviourPunCallbacks
                 rr += dr; cc += dc;
             }
 
-            int len = Mathf.Abs(maxR - minR) + Mathf.Abs(maxC - minC) + 1;
-            if (len >= 4)
+            // collect full line
+            List<Vector2Int> line = new List<Vector2Int>();
+            int curR = minR, curC = minC;
+            while (true)
             {
-                aAnch = GetAnchoredPosForCell(minR, minC);
-                bAnch = GetAnchoredPosForCell(maxR, maxC);
-                return true;
+                line.Add(new Vector2Int(curR, curC));
+                if (curR == maxR && curC == maxC) break;
+                curR += dr; curC += dc;
             }
+
+            if (line.Count < WIN_COUNT) continue;
+
+            // pick a segment of exactly WIN_COUNT that includes the last move (r,c)
+            int idxOfLast = line.FindIndex(v => v.x == r && v.y == c);
+            if (idxOfLast < 0) continue;
+
+            int start = Mathf.Clamp(idxOfLast - (WIN_COUNT - 1), 0, line.Count - WIN_COUNT);
+
+            // adjust start so last move is included
+            // (ensure idxOfLast <= start+WIN_COUNT-1)
+            if (idxOfLast > start + (WIN_COUNT - 1))
+                start = idxOfLast - (WIN_COUNT - 1);
+
+            start = Mathf.Clamp(start, 0, line.Count - WIN_COUNT);
+
+            winCells = new List<Vector2Int>();
+            for (int k = 0; k < WIN_COUNT; k++)
+                winCells.Add(line[start + k]);
+
+            // endpoints for win line UI
+            Vector2Int A = winCells[0];
+            Vector2Int B = winCells[winCells.Count - 1];
+
+            aAnch = GetAnchoredPosForCell(A.x, A.y);
+            bAnch = GetAnchoredPosForCell(B.x, B.y);
+            return true;
         }
 
         return false;
@@ -475,7 +547,6 @@ public class GameManager : MonoBehaviourPunCallbacks
             img.color = columnHighlightColor;
             img.raycastTarget = false;
 
-            // Stretch vertically across board root
             rt.anchorMin = new Vector2(0.5f, 0f);
             rt.anchorMax = new Vector2(0.5f, 1f);
             rt.pivot = new Vector2(0.5f, 0.5f);
@@ -692,7 +763,8 @@ public class GameManager : MonoBehaviourPunCallbacks
         LoadBoardFromProperty();
         UpdateStatus();
     }
-public override void OnPlayerEnteredRoom(Photon.Realtime.Player newPlayer)
+
+    public override void OnPlayerEnteredRoom(Photon.Realtime.Player newPlayer)
     {
         if (PhotonNetwork.IsMasterClient)
             MasterUpdateReadyAndInitTurn();

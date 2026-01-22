@@ -753,8 +753,8 @@ MonoBehaviour:
   piecesParent: {fileID: 5595636349162949425}
   statusText: {fileID: 794044806}
   winnerText: {fileID: 854230475512861947}
-  winLineImage: {fileID: 1308249464}
-  winLineThickness: 50
+  winLineImage: {fileID: 0}
+  winLineThickness: 0
   winLineColor: {r: 1, g: 1, b: 1, a: 0.9}
   columnHighlights: []
   columnHighlightColor: {r: 1, g: 1, b: 1, a: 0.18}
