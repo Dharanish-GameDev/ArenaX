@@ -1,10 +1,13 @@
 ﻿using System.Collections.Generic;
+using System.Collections;
 using Photon.Pun;
 using Photon.Realtime;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using ExitGames.Client.Photon;
+using Hashtable = ExitGames.Client.Photon.Hashtable;
+using UnityEngine.SceneManagement;
 
 public enum ConnectType : byte
 {
@@ -21,20 +24,26 @@ public class GameManager : MonoBehaviourPunCallbacks
         if (instance != null && instance != this) { Destroy(gameObject); return; }
         instance = this;
     }
-    
+
+    private IEnumerator ShowEndScreenDelayed(PlayerAlliance winnerAlliance, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        ShowEndScreen(winnerAlliance);
+    }
+
     [SerializeField] private ConnectType connectType;
-    
+
     // Game interface for the current game type
     private IConnectGame currentGame;
-    
+
     // Board interface
     public IConnectBoard GameBoard { get; private set; }
-    
+
     // UI References
     [SerializeField] private RectTransform[] rowRects;
     [SerializeField] private RectTransform[] columnRects;
     [SerializeField] private Image[] columnHighlights;
-    
+
     [Header("Canvas Reference")]
     [SerializeField] private RectTransform piecesParent;
     public RectTransform PiecesParent => piecesParent;
@@ -52,6 +61,13 @@ public class GameManager : MonoBehaviourPunCallbacks
     [Header("Column Highlight")]
     [SerializeField] private Color columnHighlightColor = new Color(1f, 1f, 1f, 0.18f);
 
+    // ✅ End Screen
+    [Header("End Screen")]
+    [SerializeField] private GameObject endScreenPanel;   // Assign your EndScreenPanel
+    [SerializeField] private Image endScreenImage;        // Assign ResultImage (Image component)
+    [SerializeField] private Sprite youWinSprite;         // Assign you_win.png sprite
+    [SerializeField] private Sprite youLostSprite;        // Assign you_lost.png sprite
+
     private RectTransform boardSpaceRoot;
     private bool isGameOver;
     private PlayerAlliance currentTurn = PlayerAlliance.RED;
@@ -62,20 +78,33 @@ public class GameManager : MonoBehaviourPunCallbacks
     private const string PROP_READY = "READY";
     private const string PROP_GAME_TYPE = "GAME_TYPE";
 
+    // ✅ ADDED: restart handshake (both players must press Play Again)
+    private const string PROP_RESTART_MASK = "RESTART_MASK"; // 1 = master pressed, 2 = other pressed
+
     private readonly Dictionary<int, Connect4Piece> pieceMap = new Dictionary<int, Connect4Piece>();
+    private readonly HashSet<int> pendingGlowKeys = new HashSet<int>();
+
     private int CellKey(int r, int c) => (r * 1000) + c;
 
     public void RegisterPiece(int r, int c, Connect4Piece piece)
     {
         if (piece == null) return;
-        pieceMap[CellKey(r, c)] = piece;
+
+        int key = CellKey(r, c);
+        pieceMap[key] = piece;
+
+        // ✅ If win RPC arrived before this piece registered, glow now
+        if (pendingGlowKeys.Contains(key))
+        {
+            piece.SetGlow(true);
+        }
     }
 
     private void Start()
     {
         ResolveUIRefs();
         InitializeGame();
-        
+
         boardSpaceRoot = (rowRects != null && rowRects.Length > 0) ? rowRects[0].parent as RectTransform : null;
 
         EnsureWinLineImageExists();
@@ -83,6 +112,9 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         EnsureColumnHighlightsExist();
         HideAllColumnHighlights();
+
+        // ✅ hide end screen at start
+        if (endScreenPanel != null) endScreenPanel.SetActive(false);
 
         if (winnerText != null)
         {
@@ -105,7 +137,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         UpdateStatus();
         UpdateUndoButtonState(false);
     }
-    
+
     private void InitializeGame()
     {
         // Create the appropriate game based on connectType
@@ -115,17 +147,21 @@ public class GameManager : MonoBehaviourPunCallbacks
             ConnectType.Connect5 => new Connect5Game(),
             _ => new Connect4Game()
         };
-        
+
         // Create board
         GameBoard = currentGame.CreateBoard();
-        
+
         isGameOver = false;
         localClickLock = false;
-        
+
+        // ✅ ADDED: clear local maps so a fresh match doesn't keep old refs
+        pieceMap.Clear();
+        pendingGlowKeys.Clear();
+
         // Validate UI references match board size
         if (rowRects != null && rowRects.Length != GameBoard.NumRows)
             Debug.LogWarning($"Row rects count ({rowRects.Length}) doesn't match board rows ({GameBoard.NumRows})");
-            
+
         if (columnRects != null && columnRects.Length != GameBoard.NumCols)
             Debug.LogWarning($"Column rects count ({columnRects.Length}) doesn't match board columns ({GameBoard.NumCols})");
     }
@@ -221,8 +257,6 @@ public class GameManager : MonoBehaviourPunCallbacks
             SpawnPiece_MasterOnly(column, dropRow, currentTurn);
             SetBoardProperty();
 
-            Tile placedTile = (currentTurn == PlayerAlliance.RED) ? Tile.RED : Tile.BLACK;
-
             // ✅ WIN CHECK using current game's logic
             if (currentGame.IsGameFinished(GameBoard))
             {
@@ -230,7 +264,7 @@ public class GameManager : MonoBehaviourPunCallbacks
 
                 // Get winning cells from current game
                 var winCells = currentGame.GetWinningCells(GameBoard);
-                
+
                 // Convert to arrays for RPC
                 int[] rows = new int[winCells.Count];
                 int[] cols = new int[winCells.Count];
@@ -321,7 +355,177 @@ public class GameManager : MonoBehaviourPunCallbacks
         Vector2 b = new Vector2(bx, by);
         ShowWinLineBetweenAnchors(a, b);
 
+        // ✅ show win/lose panel locally
+        StartCoroutine(ShowEndScreenDelayed(winnerAlliance, 2f));
+
         localClickLock = false;
+    }
+
+    // ✅ Home Button hook
+    public void OnHomePressed()
+    {
+        if (PhotonNetwork.InRoom)
+        {
+            PhotonNetwork.RemoveRPCs(photonView);
+            PhotonNetwork.LeaveRoom();
+        }
+        else
+        {
+            LoadHomeScene();
+        }
+    }
+
+    public override void OnLeftRoom()
+    {
+        LoadHomeScene();
+    }
+
+    private void LoadHomeScene()
+    {
+        SceneManager.LoadScene("MainMenu");
+    }
+
+    // ✅ End Screen logic
+    private void ShowEndScreen(PlayerAlliance winnerAlliance)
+    {
+        if (endScreenPanel == null || endScreenImage == null) return;
+
+        PlayerAlliance localAlliance = PhotonNetwork.IsMasterClient ? PlayerAlliance.RED : PlayerAlliance.BLACK;
+        bool didLocalWin = (winnerAlliance == localAlliance);
+
+        endScreenImage.sprite = didLocalWin ? youWinSprite : youLostSprite;
+        endScreenImage.preserveAspect = true;
+
+        endScreenPanel.SetActive(true);
+    }
+
+    // ✅ Play Again Button hook (NOW: requires BOTH players to press)
+    public void OnPlayAgainPressed()
+    {
+        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return;
+        if (PhotonNetwork.CurrentRoom.PlayerCount < 2)
+        {
+            SetStatus("Waiting for opponent...");
+            return;
+        }
+
+        // Set my "pressed" bit in room properties
+        SetRestartPressedBitLocal();
+
+        // Optional feedback
+        SetStatus("Waiting for both players...");
+    }
+
+    private void SetRestartPressedBitLocal()
+    {
+        if (PhotonNetwork.CurrentRoom == null) return;
+
+        int myBit = PhotonNetwork.IsMasterClient ? 1 : 2;
+
+        int currentMask = 0;
+        if (PhotonNetwork.CurrentRoom.CustomProperties != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(PROP_RESTART_MASK, out object val) &&
+            val is int vInt)
+        {
+            currentMask = vInt;
+        }
+
+        int newMask = currentMask | myBit;
+
+        var props = new Hashtable();
+        props[PROP_RESTART_MASK] = newMask;
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+
+        // If I'm master and both already pressed, restart immediately
+        if (PhotonNetwork.IsMasterClient && newMask == 3)
+        {
+            RestartMatch_MasterOnly();
+        }
+    }
+
+    private void RestartMatch_MasterOnly()
+    {
+        if (!PhotonNetwork.IsMasterClient) return;
+        if (PhotonNetwork.CurrentRoom == null) return;
+        if (PhotonNetwork.CurrentRoom.PlayerCount < 2) return;
+
+        // ✅ IMPORTANT: destroy room-spawned pieces first (RoomObjects survive scene reload)
+        DestroyAllSpawnedPieces_MasterOnly();
+
+        // 1) Clear buffered RPCs (old win line / glow etc.)
+        PhotonNetwork.RemoveRPCs(photonView);
+
+        // 2) Reset room properties + master local state
+        ResetRoomState_MasterOnly();
+
+        // 3) Reload scene for everyone
+        photonView.RPC(nameof(RPC_ReloadScene), RpcTarget.All);
+    }
+
+
+    private void ResetRoomState_MasterOnly()
+    {
+        if (!PhotonNetwork.IsMasterClient) return;
+        if (PhotonNetwork.CurrentRoom == null) return;
+
+        // Reset local state
+        isGameOver = false;
+        localClickLock = false;
+        currentTurn = PlayerAlliance.RED;
+
+        // Reset local board + clear maps
+        InitializeGame();
+
+        // Hide end screen locally on master
+        if (endScreenPanel != null) endScreenPanel.SetActive(false);
+
+        // Hide win line / winner text locally on master
+        HideWinLine();
+        if (winnerText != null) winnerText.text = "";
+
+        // Reset props
+        var props = new Hashtable();
+        props[PROP_READY] = (PhotonNetwork.CurrentRoom.PlayerCount >= 2) ? 1 : 0;
+        props[PROP_TURN] = 0; // RED starts
+        props[PROP_RESTART_MASK] = 0; // ✅ IMPORTANT: clear handshake
+
+        // Empty board string
+        System.Text.StringBuilder sb = new System.Text.StringBuilder(GameBoard.NumRows * GameBoard.NumCols);
+        for (int r = 0; r < GameBoard.NumRows; r++)
+            for (int c = 0; c < GameBoard.NumCols; c++)
+                sb.Append('0');
+
+        props[PROP_BOARD] = sb.ToString();
+        props["BOARD_ROWS"] = GameBoard.NumRows;
+        props["BOARD_COLS"] = GameBoard.NumCols;
+
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        HideAllColumnHighlights();
+        HideWinLine();
+        if (winnerText != null) winnerText.text = "";
+
+    }
+
+    [PunRPC]
+    private void RPC_ReloadScene()
+    {
+        // Local UI reset (client side)
+        isGameOver = false;
+        localClickLock = false;
+
+        // Clear local cached piece refs / glow state
+        pieceMap.Clear();
+        pendingGlowKeys.Clear();
+
+        // Hide end screen locally
+        if (endScreenPanel != null) endScreenPanel.SetActive(false);
+
+        // Hide win line + winner text locally
+        HideWinLine();
+        if (winnerText != null) winnerText.text = "";
+
+        // Reload current scene
+        PhotonNetwork.LoadLevel(SceneManager.GetActiveScene().name);
     }
 
     [PunRPC]
@@ -358,13 +562,18 @@ public class GameManager : MonoBehaviourPunCallbacks
     {
         if (rows == null || cols == null || rows.Length != cols.Length) return;
 
+        pendingGlowKeys.Clear();
+
         for (int i = 0; i < rows.Length; i++)
         {
-            int key = CellKey(rows[i], cols[i]);
-            if (pieceMap.TryGetValue(key, out Connect4Piece piece) && piece != null)
-            {
-                piece.SetGlow(true);
-            }
+            int r = rows[i];
+            int c = cols[i];
+
+            int keyRC = CellKey(r, c);
+            pendingGlowKeys.Add(keyRC);
+
+            if (pieceMap.TryGetValue(keyRC, out Connect4Piece p1) && p1 != null)
+                p1.SetGlow(true);
         }
     }
 
@@ -532,8 +741,16 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(PROP_BOARD))
             SetBoardProperty();
+
+        // ✅ ADDED: restart prop init
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(PROP_RESTART_MASK))
+        {
+            var p = new Hashtable();
+            p[PROP_RESTART_MASK] = 0;
+            PhotonNetwork.CurrentRoom.SetCustomProperties(p);
+        }
     }
-    
+
     private void SetGameTypeProperty(ConnectType type)
     {
         var props = new Hashtable();
@@ -634,9 +851,6 @@ public class GameManager : MonoBehaviourPunCallbacks
             if (storedType != connectType)
             {
                 Debug.LogWarning($"Stored game type ({storedType}) doesn't match local ({connectType})");
-                // Optionally: Force switch to stored type
-                // connectType = storedType;
-                // InitializeGame();
             }
         }
 
@@ -669,6 +883,17 @@ public class GameManager : MonoBehaviourPunCallbacks
             ReadTurnFromRoom();
             UpdateStatus();
         }
+
+        // ✅ ADDED: if both pressed Play Again, master starts restart
+        if (propertiesThatChanged.ContainsKey(PROP_RESTART_MASK))
+        {
+            if (PhotonNetwork.IsMasterClient && PhotonNetwork.CurrentRoom != null &&
+                PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(PROP_RESTART_MASK, out object v) &&
+                v is int mask && mask == 3)
+            {
+                RestartMatch_MasterOnly();
+            }
+        }
     }
 
     private void SetStatus(string msg)
@@ -676,6 +901,31 @@ public class GameManager : MonoBehaviourPunCallbacks
         if (statusText != null) statusText.text = msg;
         else if (!string.IsNullOrEmpty(msg)) Debug.Log(msg);
     }
+    private void DestroyAllSpawnedPieces_MasterOnly()
+    {
+        if (!PhotonNetwork.IsMasterClient) return;
+
+        // Your piece prefabs have Connect4Piece on them, so this is safe.
+        Connect4Piece[] allPieces = FindObjectsOfType<Connect4Piece>(true);
+
+        for (int i = 0; i < allPieces.Length; i++)
+        {
+            if (allPieces[i] == null) continue;
+
+            PhotonView pv = allPieces[i].GetComponent<PhotonView>();
+
+            // RoomObject = pv.IsRoomView == true
+            if (pv != null && pv.IsRoomView)
+            {
+                PhotonNetwork.Destroy(pv); // destroys for everyone
+            }
+            else
+            {
+                Destroy(allPieces[i].gameObject); // fallback for non-networked
+            }
+        }
+    }
+
 
     private void UpdateStatus()
     {
@@ -742,7 +992,17 @@ public class GameManager : MonoBehaviourPunCallbacks
     public override void OnPlayerLeftRoom(Photon.Realtime.Player otherPlayer)
     {
         if (PhotonNetwork.IsMasterClient)
+        {
             MasterUpdateReadyAndInitTurn();
+
+            // ✅ ADDED: if someone left, clear restart handshake so it doesn't auto-restart later
+            if (PhotonNetwork.CurrentRoom != null)
+            {
+                var p = new Hashtable();
+                p[PROP_RESTART_MASK] = 0;
+                PhotonNetwork.CurrentRoom.SetCustomProperties(p);
+            }
+        }
 
         SetStatus("Opponent left");
         localClickLock = false;
@@ -758,7 +1018,7 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         UpdateStatus();
     }
-    
+
     // Helper methods
     private void ResolveUIRefs()
     {

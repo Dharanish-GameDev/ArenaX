@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿// Connect4Piece.cs
+using System.Collections;
 using Photon.Pun;
 using UnityEngine;
 using UnityEngine.UI;
@@ -46,7 +47,8 @@ public class Connect4Piece : MonoBehaviourPun
     {
         rectTransform = GetComponent<RectTransform>();
 
-        if (outline == null) outline = GetComponent<Outline>();
+        if (outline == null) outline = GetComponentInChildren<Outline>(true);  // ✅ FIX
+
         if (outline != null)
         {
             outline.enabled = false;
@@ -103,6 +105,7 @@ public class Connect4Piece : MonoBehaviourPun
 
         if (GameManager.instance != null && rowIndex >= 0 && columnIndex >= 0)
         {
+            // ✅ This will now also auto-glow if GM already received win cells
             GameManager.instance.RegisterPiece(rowIndex, columnIndex, this);
         }
     }
@@ -186,7 +189,8 @@ public class Connect4Piece : MonoBehaviourPun
     // ✅ Called by GameManager when win happens
     public void SetGlow(bool on)
     {
-        if (outline == null) outline = GetComponent<Outline>();
+        if (outline == null) outline = GetComponentInChildren<Outline>(true);  // ✅ FIX
+
         if (outline == null) return;
 
         if (on)
@@ -194,7 +198,6 @@ public class Connect4Piece : MonoBehaviourPun
             outline.enabled = true;
             outline.effectColor = glowColor;
 
-            // start pulsing
             if (pulseRoutine == null)
                 pulseRoutine = StartCoroutine(PulseGlow());
         }
@@ -213,22 +216,22 @@ public class Connect4Piece : MonoBehaviourPun
             pulseRoutine = null;
         }
 
+        if (outline == null) outline = GetComponentInChildren<Outline>(true);  // ✅ FIX
         if (outline != null)
         {
             outline.effectDistance = new Vector2(glowMin, glowMin);
             outline.effectColor = glowColor;
         }
+
     }
 
     private IEnumerator PulseGlow()
     {
-        // We animate outline thickness and (optionally) alpha
         float t = 0f;
         while (true)
         {
             t += Time.unscaledDeltaTime * pulseSpeed;
 
-            // 0..1..0
             float s = (Mathf.Sin(t * Mathf.PI * 2f) + 1f) * 0.5f;
 
             float thickness = Mathf.Lerp(glowMin, glowMax, s);

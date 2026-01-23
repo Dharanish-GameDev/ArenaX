@@ -20,20 +20,27 @@ public class Connect4Game : IConnectGame
         }
         return 0;
     }
-    
+
     public List<Vector2Int> GetWinningCells(IConnectBoard board)
     {
         var winCells = new List<Vector2Int>();
+
         if (board is Connect4Board connect4Board && Connect4Utils.Finished(connect4Board))
         {
             try
             {
                 var coords = Connect4Utils.GetEndGameCoordinates(connect4Board);
-                // Convert coordinates to cells
+
+                int dRow = coords.EndRow - coords.StartRow;
+                int dCol = coords.EndColumn - coords.StartColumn;
+
+                int stepRow = dRow == 0 ? 0 : (dRow > 0 ? 1 : -1);
+                int stepCol = dCol == 0 ? 0 : (dCol > 0 ? 1 : -1);
+
                 for (int i = 0; i < WinCount; i++)
                 {
-                    int row = coords.StartRow + (coords.EndRow > coords.StartRow ? i : -i);
-                    int col = coords.StartColumn + (coords.EndColumn > coords.StartColumn ? i : -i);
+                    int row = coords.StartRow + stepRow * i;
+                    int col = coords.StartColumn + stepCol * i;
                     winCells.Add(new Vector2Int(row, col));
                 }
             }
@@ -42,6 +49,8 @@ public class Connect4Game : IConnectGame
                 // Game not actually finished
             }
         }
+
         return winCells;
     }
+
 }
