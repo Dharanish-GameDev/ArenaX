@@ -2,8 +2,9 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using Unity.Netcode;
 using UnityEngine;
+using Unity.Netcode;
+using Random = UnityEngine.Random;
 
 public class NetworkGameManager : NetworkBehaviour
 {
@@ -17,35 +18,33 @@ public class NetworkGameManager : NetworkBehaviour
 
     private NetworkVariable<int> currentRound = new NetworkVariable<int>(1);
 
-    private readonly List<NetworkPlayer> players = new List<NetworkPlayer>();
+    private List<NetworkPlayer> players = new List<NetworkPlayer>();
 
-    // ✅ 1 min 30 sec = 90
-    public NetworkVariable<int> timer = new NetworkVariable<int>(90);
+    public NetworkVariable<int> timer = new NetworkVariable<int>(25);
 
     public event Action OnTimerEnd;
 
-    [SerializeField] private int DefaultWaitTime = 90;
+    [SerializeField] private int DefaultWaitTime = 25;
     private Coroutine countDownCoroutine;
 
     private bool winnerFound = false;
-    private bool gameOver = false;
-
+    
     [SerializeField] private List<PoP_PlayerDataSO> playerDatas = new List<PoP_PlayerDataSO>();
 
-    private bool lobbyTimerStarted = false;
+    public static int defaultLives = 3;
 
     private void Awake() => Instance = this;
 
-    // -------------------- Timer --------------------
+    #region Timer
     public void StartCountDown()
     {
-        if (!IsServer) return;
-        if (winnerFound || gameOver) return;
+        if (winnerFound) return;
 
-        // if last player left -> winner
-        if (TryStopGameIfSingleActive()) return;
-
-        StopTimerServer();
+        if (countDownCoroutine != null)
+        {
+            StopCoroutine(countDownCoroutine);
+            countDownCoroutine = null;
+        }
 
         EnableTimerTextClientRPC();
         countDownCoroutine = StartCoroutine(CountDownCoroutine());
@@ -57,48 +56,25 @@ public class NetworkGameManager : NetworkBehaviour
 
         while (timer.Value > 0)
         {
-            if (winnerFound || gameOver) yield break;
-            if (TryStopGameIfSingleActive()) yield break;
-
             yield return new WaitForSeconds(1f);
             timer.Value--;
-        }
-
-        // ✅ TIMER HIT 0 => SERVER MUST PROCESS TIMEOUT ROUND
-        if (IsServer && !winnerFound && !gameOver)
-        {
-            HandleRoundTimeout_Server();
         }
 
         FireTimerCountdownEndClientRPC();
     }
 
-    private void StopTimerServer()
-    {
-        if (!IsServer) return;
-
-        if (countDownCoroutine != null)
-        {
-            StopCoroutine(countDownCoroutine);
-            countDownCoroutine = null;
-        }
-    }
-
     [ClientRpc]
     private void FireTimerCountdownEndClientRPC()
     {
-        if (gameOver) return;
+        Debug.Log($"Countdown finished in {countDownSeconds} Secs");
         OnTimerEnd?.Invoke();
     }
 
     [ClientRpc]
-    private void EnableTimerTextClientRPC()
-    {
-        if (_panelManager != null)
-            _panelManager.EnableTimerText();
-    }
+    private void EnableTimerTextClientRPC() => _panelManager.EnableTimerText();
+    #endregion
 
-    // -------------------- Register --------------------
+    #region Register
     public void RegisterTimerValueChanged(NetworkVariable<int>.OnValueChangedDelegate onValueChanged)
     {
         timer.OnValueChanged -= onValueChanged;
@@ -113,41 +89,15 @@ public class NetworkGameManager : NetworkBehaviour
 
     public void RegisterMeToTheMatch(NetworkPlayer player)
     {
-        if (!players.Contains(player))
-            players.Add(player);
-
-        // ✅ Auto start timer as soon as lobby has 2 active players
-        if (IsServer)
-            TryStartLobbyTimer();
+        if (!players.Contains(player)) players.Add(player);
     }
+    #endregion
 
-    private void TryStartLobbyTimer()
-    {
-        if (!IsServer) return;
-        if (lobbyTimerStarted) return;
-        if (winnerFound || gameOver) return;
-
-        var activePlayers = GetActivePlayers();
-
-        if (activePlayers.Count == 1)
-        {
-            TryStopGameIfSingleActive();
-            return;
-        }
-
-        if (activePlayers.Count >= 2)
-        {
-            lobbyTimerStarted = true;
-            StartCountDown();
-        }
-    }
-
-    // -------------------- Submissions --------------------
-    private readonly Dictionary<int, int> submittedNumbersDict = new Dictionary<int, int>();
+    #region Submissions
+    private Dictionary<int, int> submittedNumbersDict = new Dictionary<int, int>();
 
     public void SubmittedNumber(int playerId, int currentNumber)
     {
-        if (gameOver || winnerFound) return;
         if (currentNumber < 0) return;
 
         if (!submittedNumbersDict.ContainsKey(playerId))
@@ -155,100 +105,66 @@ public class NetworkGameManager : NetworkBehaviour
 
         var activePlayers = GetActivePlayers();
 
-        // ✅ If everyone submitted early, finish round early
-        if (IsServer && activePlayers.Count > 0 && activePlayers.Count == submittedNumbersDict.Count)
+        if (IsServer &&
+            activePlayers.Count > 0 &&
+            activePlayers.Count == submittedNumbersDict.Count)
         {
-            StopTimerServer();
+            Debug.Log($"Round Finishing in {countDownSeconds} Secs");
 
-            StartCountDownClientRPC(countDownSeconds);
-            StartCoroutine(FinishRoundAfterDelay_Server(countDownSeconds));
-        }
-    }
-
-    private IEnumerator FinishRoundAfterDelay_Server(int delaySeconds)
-    {
-        yield return new WaitForSeconds(delaySeconds);
-        AdvanceRound();
-    }
-
-    // ✅ TIMEOUT path: penalize non-submitters then advance round
-    private void HandleRoundTimeout_Server()
-    {
-        if (!IsServer || winnerFound || gameOver) return;
-
-        var activePlayers = GetActivePlayers();
-        if (activePlayers.Count <= 0) return;
-
-        // ✅ Non-submit = lose 1 life
-        foreach (var p in activePlayers)
-        {
-            int id = p.GetPlayerID();
-            if (!submittedNumbersDict.ContainsKey(id))
+            if (countDownCoroutine != null)
             {
-                int newLives = Mathf.Max(0, p.GetLives() - 1);
-                p.SetLives(newLives);
-
-                if (newLives <= 0)
-                    p.SetPlayerState(PlayerState.Eliminated);
+                StopCoroutine(countDownCoroutine);
+                countDownCoroutine = null;
             }
-        }
 
-        // if only one remains -> winner
-        if (TryStopGameIfSingleActive())
-        {
-            submittedNumbersDict.Clear();
-            return;
-        }
+            FireTimerCountdownEndClientRPC();
+            StartCountDownClientRPC(countDownSeconds);
 
-        // Finish round now
-        AdvanceRound();
+            Invoke(nameof(AdvanceRound), countDownSeconds);
+        }
     }
+    #endregion
 
-    // -------------------- Round Flow --------------------
+    #region RoundFlow
+
     private void AdvanceRound()
     {
-        if (!IsServer || winnerFound || gameOver) return;
-
-        if (TryStopGameIfSingleActive()) return;
+        if (!IsServer || winnerFound) return;
 
         currentRound.Value += 1;
 
         Dictionary<int, int> playerScores = GetPlayerScores();
 
         RoundResult result = RuleManager.Instance.ProcessSubmissions(submittedNumbersDict);
+
         if (result != null)
         {
+            // 🔹 PATCHED: get only non-duplicate winners or none
             int[] winners = GetRoundWinners(result, submittedNumbersDict).ToArray();
 
+            if (winners.Length == 0)
+                Debug.Log("❌ No Winner this round (duplicate rule triggered)");
+            else
+                Debug.Log("🏆 Winners: " + string.Join(", ", winners));
+
+            // 🔹 Update UI
             UpdateAfterRoundUIClientRPC(winners, result.calculatedTarget);
 
-            // apply point changes
+            // Apply point changes
             var pointChanges = result.GetPointChanges();
             foreach (var change in pointChanges)
-            {
-                if (!playerScores.ContainsKey(change.Key))
-                    playerScores.Add(change.Key, 0);
-
                 playerScores[change.Key] += change.Value;
-            }
 
-            UpdateFinalScores(playerScores);
-
-            if (TryStopGameIfSingleActive()) return;
-
-            // ✅ Start next round timer
+            UpdatePointChanges(playerScores);
             StartCountDown();
         }
 
-        // clear submissions after round completes
         submittedNumbersDict.Clear();
     }
 
     private List<int> GetRoundWinners(RoundResult result, Dictionary<int, int> submissions)
     {
         List<int> winners = new List<int>();
-        if (submissions == null || submissions.Count == 0) return winners;
-
         float minDiff = submissions.Min(p => Mathf.Abs(p.Value - result.calculatedTarget));
 
         foreach (var p in submissions)
@@ -262,64 +178,33 @@ public class NetworkGameManager : NetworkBehaviour
 
         return winners;
     }
+    #endregion
 
-    private void UpdateFinalScores(Dictionary<int, int> finalScores)
+    #region Scoring
+    private void UpdatePointChanges(Dictionary<int, int> pointChanges)
     {
-        foreach (var kv in finalScores)
+        foreach (var change in pointChanges)
         {
-            NetworkPlayer player = players.FirstOrDefault(p => p != null && p.GetPlayerID() == kv.Key);
+            NetworkPlayer player = players.FirstOrDefault(p => p.GetPlayerID() == change.Key);
             if (player != null)
-                player.UpdateCurrentScore(kv.Value);
+                player.UpdateCurrentScore(change.Value);
         }
-    }
 
-    // -------------------- Game Over --------------------
-    private bool TryStopGameIfSingleActive()
-    {
-        if (!IsServer || gameOver || winnerFound) return false;
-
-        var active = GetActivePlayers();
-        if (active.Count == 1)
+        // Winner check for 2-player remaining logic (unchanged)
+        if (pointChanges.Count == 2)
         {
-            int winnerId = active[0].GetPlayerID();
-            StopGameServer(winnerId);
-            return true;
+            var remaining = pointChanges.Where(p => p.Value > 0).Select(p => p.Key).ToList();
+            if (remaining.Count == 1)
+            {
+                int winnerId = remaining[0];
+                winnerFound = true;
+                AnnounceWinnerClientRPC(winnerId);
+            }
         }
-        return false;
     }
+    #endregion
 
-    private void StopGameServer(int winnerId)
-    {
-        if (gameOver) return;
-
-        winnerFound = true;
-        gameOver = true;
-
-        StopTimerServer();
-        submittedNumbersDict.Clear();
-
-        StopGameClientRPC(winnerId);
-    }
-
-    [ClientRpc]
-    private void StopGameClientRPC(int winnerId)
-    {
-        // hide number input UI for everyone
-        if (NumbersHandler.Instance != null)
-            NumbersHandler.Instance.SetInputVisibleAndInteractable(false, resetSelection: true);
-
-        // ✅ show winner panel only for winner, loser panel for others
-        int localId = -1;
-        if (NetworkPlayer.LocalInstance != null)
-            localId = NetworkPlayer.LocalInstance.GetPlayerID();
-
-        bool isWinner = (localId == winnerId);
-
-        if (_panelManager != null)
-            _panelManager.ShowWinnerLoserPanel(isWinner, winnerId);
-    }
-
-    // -------------------- Helpers --------------------
+    #region Helpers
     private Dictionary<int, int> GetPlayerScores()
     {
         Dictionary<int, int> scores = new Dictionary<int, int>();
@@ -330,29 +215,42 @@ public class NetworkGameManager : NetworkBehaviour
 
     private List<NetworkPlayer> GetActivePlayers()
     {
-        return players
-            .Where(p => p != null && p.GetCurrentPlayerState() == PlayerState.Active)
-            .ToList();
+        return players.Where(p => p.GetCurrentPlayerState() == PlayerState.Active).ToList();
     }
+    #endregion
 
-    // -------------------- RPCs --------------------
+    #region RPCs
     [ClientRpc]
-    private void StartCountDownClientRPC(int seconds)
-    {
-        if (_panelManager != null)
-            _panelManager.StartCountdown(seconds);
-    }
+    private void StartCountDownClientRPC(int countDownSeconds)
+        => _panelManager.StartCountdown(countDownSeconds);
 
     [ClientRpc]
     private void UpdateAfterRoundUIClientRPC(int[] winnerIds, float targetNumber)
-    {
-        if (_panelManager != null)
-            _panelManager.UpdateAfterRoundUI(winnerIds, targetNumber);
-    }
+        => _panelManager.UpdateAfterRoundUI(winnerIds, targetNumber);
 
-    // -------------------- Data --------------------
+    [ClientRpc]
+    private void AnnounceWinnerClientRPC(int winnerId)
+        => _panelManager.AnnounceWinner(winnerId);
+    #endregion
+
+    #region DataHandlers
+
     public PoP_PlayerDataSO GetPlayerDataForId(int playerId)
     {
-        return playerDatas.FirstOrDefault(p => p.playerID == playerId);
+        PoP_PlayerDataSO playerDataSO = null;
+        playerDataSO = playerDatas.FirstOrDefault(p => p.playerID == playerId);
+        return playerDataSO;
     }
+
+    #endregion
+#if UNITY_EDITOR
+    [Range(1, 10)]
+    [SerializeField] private int roundDebug = 1;
+
+    [ContextMenu("DebugCurrentRound")]
+    private void DebugCurrentRound()
+    {
+        if (IsServer) currentRound.Value = roundDebug;
+    }
+#endif
 }

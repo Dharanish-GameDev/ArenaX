@@ -1053,7 +1053,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &197382848
 RectTransform:
   m_ObjectHideFlags: 0
@@ -3739,7 +3739,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &785383738
 RectTransform:
   m_ObjectHideFlags: 0
@@ -4977,11 +4977,11 @@ MonoBehaviour:
   roundCountText: {fileID: 817179917}
   afterRoundObj: {fileID: 2128768033}
   targetNumberText: {fileID: 878520664}
+  winnerAnnouncementPanel: {fileID: 410942656}
+  winnerUIObj: {fileID: 785383737}
+  loserUIObj: {fileID: 197382847}
   startMatchButton: {fileID: 1619649280}
   timerText: {fileID: 108011923}
-  winnerPanel: {fileID: 785383737}
-  loserPanel: {fileID: 197382847}
-  overallWinnerText: {fileID: 1775360409}
 --- !u!1 &1068120478
 GameObject:
   m_ObjectHideFlags: 0
@@ -5539,6 +5539,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 7b9c88388dc29ab4b80131e861cd1ae2, type: 2}
   - {fileID: 11400000, guid: 569d4f2041614044dbd46d139486c78b, type: 2}
   - {fileID: 11400000, guid: 8d53bb1b3050f8842bf65ee61d3106d8, type: 2}
+  roundDebug: 1
 --- !u!1 &1209100447
 GameObject:
   m_ObjectHideFlags: 0
