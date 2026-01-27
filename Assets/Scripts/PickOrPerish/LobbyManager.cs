@@ -34,7 +34,7 @@ public class LobbyManager : MonoBehaviour
 
 
     // Hidden in Inspector
-    private int maxConnections = 2;
+    private int maxConnections = 4;
     private readonly string lobbyName = "PickOrPerish";
     private readonly string startGameDataKey = "START_GAME";
     private Lobby hostLobby;
@@ -99,7 +99,7 @@ public class LobbyManager : MonoBehaviour
     private void OnMaxPlayerDropDownChanged(int newValue)
     {
         Debug.Log("MaxPlayerDropDownChanged: " + newValue);
-        maxConnections = newValue + 1;
+        maxConnections = newValue + 4 ;
         Debug.Log("New Max Connections: " + maxConnections);
     }
 

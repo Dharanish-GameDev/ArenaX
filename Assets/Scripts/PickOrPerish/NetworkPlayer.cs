@@ -1,156 +1,157 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using System.Collections;
 using Unity.Netcode;
-using System;
+using UnityEngine;
 
 public class NetworkPlayer : NetworkBehaviour
 {
-    private PlayerUISet _playerUISet;
-    
-    // NetworkVariables
-    
-    private NetworkVariable<int> currentNumber = new NetworkVariable<int>(0,NetworkVariableReadPermission.Everyone,NetworkVariableWritePermission.Server);
-    private NetworkVariable<int> currentScore = new NetworkVariable<int>(3,NetworkVariableReadPermission.Everyone,NetworkVariableWritePermission.Server);
-    private NetworkVariable<int> playerActiveState = new NetworkVariable<int>(0); // 0 is Active, 1 - Eliminated
+    public static NetworkPlayer LocalInstance { get; private set; }
 
-    private bool isSubmitted = false;
-    
-    public int GetPlayerID() => (int)OwnerClientId;
+    // ---- NetworkVariables ----
+    private readonly NetworkVariable<int> playerId = new NetworkVariable<int>(
+        -1, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    public void RegisterCurrentNumberValueChanged(NetworkVariable<int>.OnValueChangedDelegate callback)
-    {
-        currentNumber.OnValueChanged -= callback;
-        currentNumber.OnValueChanged += callback;
-    }
+    private readonly NetworkVariable<int> currentScore = new NetworkVariable<int>(
+        0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    public void RegisterCurrentScoreValueChanged(NetworkVariable<int>.OnValueChangedDelegate callback)
-    {
-        currentScore.OnValueChanged -= callback;
-        currentScore.OnValueChanged += callback;
-    }
+    private readonly NetworkVariable<int> currentNumber = new NetworkVariable<int>(
+        -1, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    public void RegisterPlayerStateChanges(NetworkVariable<int>.OnValueChangedDelegate callback)
-    {
-        playerActiveState.OnValueChanged -= callback;
-        playerActiveState.OnValueChanged += callback;
-    }
+    private readonly NetworkVariable<PlayerState> playerState = new NetworkVariable<PlayerState>(
+        PlayerState.Active, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    public int GetCurrentScore()
-    {
-        return currentScore.Value;
-    }
+    // ✅ Lives (starts at 3)
+    private readonly NetworkVariable<int> lives = new NetworkVariable<int>(
+        3, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    public PlayerState GetCurrentPlayerState()
-    {
-        return (PlayerState)playerActiveState.Value;
-    }
-    
-
-    #region  Networking Methods
+    private bool uiSpawned;
 
     public override void OnNetworkSpawn()
     {
-        // Need to Instantiate UI Set
-        name = "Player_" + OwnerClientId.ToString();
-        _playerUISet = NetworkGameManager.Instance.PanelManager?.CreatePlayerUISet();
-        if (_playerUISet != null)
-        {
-            _playerUISet.SetPlayer(this);
-        }
-        NetworkGameManager.Instance.RegisterOnCurrentRoundValueChanged(OnCurrentRoundChanged);
-        NetworkGameManager.Instance.RegisterMeToTheMatch(this);
-        NetworkGameManager.Instance.OnTimerEnd += () =>
-        {
-            if (!isSubmitted && playerActiveState.Value == 0 && IsOwner) // Means Still Playing And Not Submitted
-            {
-                // Making it Force Submit
-                _playerUISet.SetSubmitButtonInteractable(false);
-                int value = _playerUISet.GetInputValue();
-                if (value > 0)
-                {
-                    SetCurrentNumber(value);
-                    Debug.Log("Force Submitting");
-                }
-                else
-                {
-                    Debug.Log("Submitting Previous Number : " + lastSubmitterValue);
-                    SetCurrentNumber(lastSubmitterValue);
-                }
-            }
-        };
-        RegisterCurrentNumberValueChanged(OnCurrentNumberChanged);
-    }
+        base.OnNetworkSpawn();
 
-    public override void OnNetworkDespawn()
-    {
-        // Need to Destroy the UI Set
-        if (_playerUISet != null)
-        {
-            Destroy(_playerUISet.gameObject);
-        }
-    }
-    int lastSubmitterValue = 0;
-    private void OnCurrentNumberChanged(int prev, int current)
-    {
-        if(current < 0 || !IsOwner) return;
-        lastSubmitterValue = current;
-        isSubmitted = true;
-        SubmitCurrentNumberServerRPC();
-    }
-    private void OnCurrentRoundChanged(int prevRound,int currentRound)
-    {
         if (IsOwner)
-        {
-            SetCurrentNumber(-1); // Means To Clear it Up
-        }
-        if (_playerUISet != null)
-        {
-            _playerUISet.SetSubmitButtonInteractable(true);
-        }
-        isSubmitted = false;
-    }
-    public void UpdateCurrentScore(int score)
-    {
-        Debug.Log($"Player_{GetPlayerID()}_New Score: {score}");
-        UpdateCurrentScoreClientRPC(score);
-    }
-    [ClientRpc]
-    private void UpdateCurrentScoreClientRPC(int score)
-    {
-        if(!IsOwner) return;
-        UpdateCurrentScoreServerRPC(score);
-    }
-    [ServerRpc]
-    private void UpdateCurrentScoreServerRPC(int score)
-    {
-        currentScore.Value = score;
-        if (currentScore.Value <= 0)
-        {
-            playerActiveState.Value = 1; // Means Eliminated
-        }
-    }
-    
-    // RPC Methods
-    public void SetCurrentNumber(int number)
-    {
-        SetCurrentNumberServerRPC(number);
-    }
-    [ServerRpc]
-    private void SetCurrentNumberServerRPC(int number)
-    {
+            LocalInstance = this;
+
         if (IsServer)
         {
-            currentNumber.Value = number;
+            playerId.Value = (int)OwnerClientId;
+
+            // ✅ Always start with 3 lives
+            lives.Value = 3;
+
+            if (NetworkGameManager.Instance != null)
+                NetworkGameManager.Instance.RegisterMeToTheMatch(this);
         }
+
+        // ✅ Create Player UI on ALL clients once ready
+        StartCoroutine(SpawnUIWhenReady());
     }
-    [ServerRpc]
-    public void SubmitCurrentNumberServerRPC()
+
+    private IEnumerator SpawnUIWhenReady()
     {
-        NetworkGameManager.Instance.SubmittedNumber(GetPlayerID(), currentNumber.Value);
+        // wait for manager + panel
+        while (NetworkGameManager.Instance == null || NetworkGameManager.Instance.PanelManager == null)
+            yield return null;
+
+        // wait until playerId is assigned by server
+        while (GetPlayerID() < 0)
+            yield return null;
+
+        if (uiSpawned) yield break;
+        uiSpawned = true;
+
+        var ui = NetworkGameManager.Instance.PanelManager.CreatePlayerUISet();
+        if (ui != null)
+            ui.SetPlayer(this);
     }
-    
-    #endregion
-    
-    
+
+    private void OnDestroy()
+    {
+        if (LocalInstance == this)
+            LocalInstance = null;
+    }
+
+    // -------------------- GETTERS --------------------
+    public int GetPlayerID() => playerId.Value;
+    public int GetCurrentScore() => currentScore.Value;
+    public int GetCurrentNumber() => currentNumber.Value;
+    public PlayerState GetCurrentPlayerState() => playerState.Value;
+    public int GetLives() => lives.Value;
+
+    // -------------------- SCORE --------------------
+    public void UpdateCurrentScore(int newScore)
+    {
+        if (IsServer) currentScore.Value = newScore;
+        else SetScoreServerRpc(newScore);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void SetScoreServerRpc(int newScore)
+    {
+        currentScore.Value = newScore;
+    }
+
+    // -------------------- NUMBER --------------------
+    public void SetCurrentNumber(int number)
+    {
+        if (IsServer) currentNumber.Value = number;
+        else SetNumberServerRpc(number);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void SetNumberServerRpc(int number)
+    {
+        currentNumber.Value = number;
+    }
+
+    // -------------------- LIVES --------------------
+    public void SetLives(int v)
+    {
+        if (IsServer) lives.Value = v;
+        else SetLivesServerRpc(v);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void SetLivesServerRpc(int v)
+    {
+        lives.Value = v;
+    }
+
+    // -------------------- STATE --------------------
+    public void SetPlayerState(PlayerState newState)
+    {
+        if (IsServer) playerState.Value = newState;
+        else SetStateServerRpc(newState);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void SetStateServerRpc(PlayerState newState)
+    {
+        playerState.Value = newState;
+    }
+
+    // -------------------- UI REGISTRATION HELPERS --------------------
+    public void RegisterCurrentScoreValueChanged(NetworkVariable<int>.OnValueChangedDelegate onValueChanged)
+    {
+        currentScore.OnValueChanged -= onValueChanged;
+        currentScore.OnValueChanged += onValueChanged;
+    }
+
+    public void RegisterCurrentNumberValueChanged(NetworkVariable<int>.OnValueChangedDelegate onValueChanged)
+    {
+        currentNumber.OnValueChanged -= onValueChanged;
+        currentNumber.OnValueChanged += onValueChanged;
+    }
+
+    public void RegisterPlayerStateChanges(NetworkVariable<PlayerState>.OnValueChangedDelegate onValueChanged)
+    {
+        playerState.OnValueChanged -= onValueChanged;
+        playerState.OnValueChanged += onValueChanged;
+    }
+
+    public void RegisterLivesValueChanged(NetworkVariable<int>.OnValueChangedDelegate onValueChanged)
+    {
+        lives.OnValueChanged -= onValueChanged;
+        lives.OnValueChanged += onValueChanged;
+    }
 }

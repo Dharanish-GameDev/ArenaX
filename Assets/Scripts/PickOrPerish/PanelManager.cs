@@ -1,9 +1,5 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Collections;
 using TMPro;
-using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -17,67 +13,82 @@ public class PanelManager : MonoBehaviour
 
     [SerializeField] private TextMeshProUGUI roundCountText;
 
-    //[SerializeField] private GameObject timerObject;
-    //[SerializeField] private TextMeshProUGUI timeText;
-    private Coroutine countdownRoutine;
-
     [SerializeField] private GameObject afterRoundObj;
     [SerializeField] private TextMeshProUGUI targetNumberText;
-   // [SerializeField] private TextMeshProUGUI winnerNameText;
-
-    [SerializeField] private GameObject winnerUIObj;
-    [SerializeField] private TextMeshProUGUI overallWinnerText;
 
     [SerializeField] private Button startMatchButton;
 
     [SerializeField] private TextMeshProUGUI timerText;
 
+    [Header("Winner / Loser Panels")]
+    [SerializeField] private GameObject winnerPanel;
+    [SerializeField] private GameObject loserPanel;
+    [SerializeField] private TextMeshProUGUI overallWinnerText;
+
+    private Coroutine countdownRoutine;
+
     private void Awake()
     {
-        connectionPanel.SetActive(true);
-        gameplayPanel.SetActive(false);
-        startMatchButton.gameObject.SetActive(false);
-        startMatchButton.onClick.AddListener(() =>
+        if (connectionPanel != null) connectionPanel.SetActive(true);
+        if (gameplayPanel != null) gameplayPanel.SetActive(false);
+
+        if (startMatchButton != null)
         {
             startMatchButton.gameObject.SetActive(false);
-            NetworkGameManager.Instance.StartCountDown();
-        });
+            startMatchButton.onClick.RemoveAllListeners();
+            startMatchButton.onClick.AddListener(() =>
+            {
+                startMatchButton.gameObject.SetActive(false);
+                NetworkGameManager.Instance.StartCountDown();
+            });
+        }
+
+        if (afterRoundObj != null) afterRoundObj.SetActive(false);
+
+        if (winnerPanel != null) winnerPanel.SetActive(false);
+        if (loserPanel != null) loserPanel.SetActive(false);
     }
 
     private void Start()
     {
-        NetworkCallsManager.Instance.RegisterOnConnectedToNetwork(EnableGamePlayPanel);
-        NetworkGameManager.Instance.RegisterOnCurrentRoundValueChanged(OnRoundValueChanged);
-        NetworkGameManager.Instance.RegisterTimerValueChanged(OnTimerValueChanged);
-        NetworkGameManager.Instance.OnTimerEnd += () =>
+        // You already had this in your project
+        if (NetworkCallsManager.Instance != null)
+            NetworkCallsManager.Instance.RegisterOnConnectedToNetwork(EnableGamePlayPanel);
+
+        if (NetworkGameManager.Instance != null)
         {
-            // timerText.gameObject.SetActive(false);
-        };
+            NetworkGameManager.Instance.RegisterOnCurrentRoundValueChanged(OnRoundValueChanged);
+            NetworkGameManager.Instance.RegisterTimerValueChanged(OnTimerValueChanged);
+        }
     }
 
-    public void AnnounceWinner(int winnerId)
+    public void EnableGamePlayPanel()
     {
-        winnerUIObj.SetActive(true);
-        overallWinnerText.text = "Player_" + winnerId;
+        if (connectionPanel != null) connectionPanel.SetActive(false);
+        if (gameplayPanel != null) gameplayPanel.SetActive(true);
     }
 
     public void EnableTimerText()
     {
-        timerText.gameObject.SetActive(true);
+        if (timerText != null)
+            timerText.gameObject.SetActive(true);
     }
 
     public void ShowStartMatchButton()
     {
-        startMatchButton.gameObject.SetActive(true);
+        if (startMatchButton != null)
+            startMatchButton.gameObject.SetActive(true);
     }
-    public void EnableGamePlayPanel()
+
+    public void HideStartMatchButton()
     {
-        connectionPanel.SetActive(false);
-        gameplayPanel.SetActive(true);
+        if (startMatchButton != null)
+            startMatchButton.gameObject.SetActive(false);
     }
 
     public PlayerUISet CreatePlayerUISet()
     {
+        if (playerUISetRef == null || playerUISetsParent == null) return null;
         PlayerUISet temp = Instantiate(playerUISetRef, playerUISetsParent);
         return temp;
     }
@@ -85,32 +96,26 @@ public class PanelManager : MonoBehaviour
     private void OnRoundValueChanged(int previousRound, int currentRound)
     {
         if (roundCountText != null)
-        {
             roundCountText.text = currentRound.ToString();
-        }
-        timerText.gameObject.SetActive(true);
+
+        if (timerText != null)
+            timerText.gameObject.SetActive(true);
     }
 
     private void OnTimerValueChanged(int prev, int current)
     {
-        if (timerText != null)
-        {
-            int minutes = current / 60;
-            int seconds = current % 60;
-            
-            timerText.text = $"{minutes:00}:{seconds:00}";
-            
-            timerText.text = $"{minutes:00}.{seconds:00}";
+        if (timerText == null) return;
 
-            timerText.text = string.Format("{0:00}:{1:00}", minutes, seconds);
-        }
+        int minutes = current / 60;
+        int seconds = current % 60;
+        timerText.text = $"{minutes:00}:{seconds:00}";
     }
 
     public void StartCountdown(int timeInSeconds)
     {
         if (countdownRoutine != null)
             StopCoroutine(countdownRoutine);
-        // timerObject.SetActive(true);
+
         countdownRoutine = StartCoroutine(Countdown(timeInSeconds));
     }
 
@@ -122,41 +127,42 @@ public class PanelManager : MonoBehaviour
             yield return new WaitForSeconds(1f);
             time--;
         }
-
         UpdateTimerUI(0);
     }
 
     private void UpdateTimerUI(int time)
     {
+        if (timerText == null) return;
+
         int minutes = time / 60;
         int seconds = time % 60;
         timerText.text = $"{minutes:00}:{seconds:00}";
     }
 
-    // 🔹 PATCHED: handle multiple winners or no winner
-
     private void DisableAfterRoundUI()
     {
-        afterRoundObj.SetActive(false);
+        if (afterRoundObj != null)
+            afterRoundObj.SetActive(false);
     }
-    
+
     public void UpdateAfterRoundUI(int[] winnerIds, float targetNumber)
     {
-        afterRoundObj.SetActive(true);
-        //
-        // // Show winner(s) or no winner
-        // if (winnerIds == null || winnerIds.Length == 0)
-        // {
-        //     winnerNameText.text = "No Winner";
-        // }
-        // else
-        // {
-        //     winnerNameText.text = string.Join(", ", winnerIds.Select(id => "Player_" + id));
-        // }
-        
-        
+        if (afterRoundObj != null)
+            afterRoundObj.SetActive(true);
 
-        targetNumberText.text = Mathf.RoundToInt(targetNumber).ToString();
-        Invoke(nameof(DisableAfterRoundUI),2.5f);
+        if (targetNumberText != null)
+            targetNumberText.text = Mathf.RoundToInt(targetNumber).ToString();
+
+        Invoke(nameof(DisableAfterRoundUI), 2.5f);
+    }
+
+    // ✅ Winner/Loser display
+    public void ShowWinnerLoserPanel(bool isWinner, int winnerId)
+    {
+        if (winnerPanel != null) winnerPanel.SetActive(isWinner);
+        if (loserPanel != null) loserPanel.SetActive(!isWinner);
+
+        if (overallWinnerText != null)
+            overallWinnerText.text = "Player_" + winnerId;
     }
 }

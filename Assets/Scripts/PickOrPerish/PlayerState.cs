@@ -1,11 +1,5 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
-
-public enum PlayerState : byte
+public enum PlayerState
 {
     Active = 0,
     Eliminated = 1
 }
-
-

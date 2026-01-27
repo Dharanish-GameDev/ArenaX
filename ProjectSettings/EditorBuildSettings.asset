@@ -10,10 +10,10 @@ EditorBuildSettings:
     guid: a2f120655d1e97347ab47ddbb1b123b6
   - enabled: 1
     path: Assets/Scenes/PlayerChoice4.unity
-    guid: 825c01073bf984c4ba67bc477fbe53d0
-  - enabled: 1
+    guid: 4533ecaaf7a29e04eb44796c4dba7eb1
+  - enabled: 0
     path: Assets/Scenes/PlayerChoice5.unity
-    guid: a765f1da56fb25e45938117f37c51cfe
+    guid: 37ed307b0b3ae8b4e9028fe5f378a078
   - enabled: 1
     path: Assets/Scenes/Connect4.unity
     guid: 2cda990e2423bbf4892e6590ba056729

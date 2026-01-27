@@ -1,5 +1,5 @@
-﻿using System.Collections.Generic;
-using System.Collections;
+﻿using System.Collections;
+using System.Collections.Generic;
 using Photon.Pun;
 using Photon.Realtime;
 using TMPro;
@@ -13,6 +13,14 @@ public enum ConnectType : byte
 {
     Connect4,
     Connect5
+}
+
+// ✅ Game modes (your 3 buttons)
+public enum GameMode : byte
+{
+    VsAI,
+    PassAndPlay,
+    Multiplayer
 }
 
 public class GameManager : MonoBehaviourPunCallbacks
@@ -32,6 +40,27 @@ public class GameManager : MonoBehaviourPunCallbacks
     }
 
     [SerializeField] private ConnectType connectType;
+
+    // ✅ Mode selection
+    [Header("Mode Select Panel")]
+    [SerializeField] private GameObject modeSelectPanel;
+    [SerializeField] private GameMode currentMode = GameMode.Multiplayer;
+
+    // ✅ Local-mode prefabs (UI prefabs, NOT Photon prefabs)
+    [Header("Local Mode Piece Prefabs (UI)")]
+    [Header("Panels")]
+    [SerializeField] private GameObject bgPanel;   // ✅ assign BG panel here
+
+    [SerializeField] private GameObject localRedPiecePrefab;
+    [SerializeField] private GameObject localYellowPiecePrefab;
+
+    [Header("Local Drop Settings")]
+    [SerializeField] private float localDropSpeed = 1200f;
+    [SerializeField] private float localDropStartPadding = 120f;
+
+    // ✅ Local coroutine safety (fixes MissingReferenceException)
+    private Coroutine localMoveCoroutine;
+    private int localRunToken = 0; // increment to cancel old coroutines immediately
 
     // Game interface for the current game type
     private IConnectGame currentGame;
@@ -61,12 +90,23 @@ public class GameManager : MonoBehaviourPunCallbacks
     [Header("Column Highlight")]
     [SerializeField] private Color columnHighlightColor = new Color(1f, 1f, 1f, 0.18f);
 
-    // ✅ End Screen
     [Header("End Screen")]
-    [SerializeField] private GameObject endScreenPanel;   // Assign your EndScreenPanel
-    [SerializeField] private Image endScreenImage;        // Assign ResultImage (Image component)
-    [SerializeField] private Sprite youWinSprite;         // Assign you_win.png sprite
-    [SerializeField] private Sprite youLostSprite;        // Assign you_lost.png sprite
+    [SerializeField] private GameObject endScreenPanel;
+    [SerializeField] private Image endScreenImage;
+    [SerializeField] private Sprite youWinSprite;
+    [SerializeField] private Sprite youLostSprite;
+
+    [Header("Turn Indicator Discs (UI)")]
+    [SerializeField] private Image redTurnDisc;
+    [SerializeField] private Image yellowTurnDisc;
+    [SerializeField] private Outline redTurnOutline;
+    [SerializeField] private Outline yellowTurnOutline;
+
+    [Header("Turn Glow Settings")]
+    [SerializeField] private float onAlpha = 1f;
+    [SerializeField] private float offAlpha = 0.35f;
+    [SerializeField] private Vector2 glowOutlineSize = new Vector2(10f, 10f);
+    [SerializeField] private Vector2 offOutlineSize = new Vector2(0f, 0f);
 
     private RectTransform boardSpaceRoot;
     private bool isGameOver;
@@ -77,9 +117,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     private const string PROP_BOARD = "BOARD";
     private const string PROP_READY = "READY";
     private const string PROP_GAME_TYPE = "GAME_TYPE";
-
-    // ✅ ADDED: restart handshake (both players must press Play Again)
-    private const string PROP_RESTART_MASK = "RESTART_MASK"; // 1 = master pressed, 2 = other pressed
+    private const string PROP_RESTART_MASK = "RESTART_MASK";
 
     private readonly Dictionary<int, Connect4Piece> pieceMap = new Dictionary<int, Connect4Piece>();
     private readonly HashSet<int> pendingGlowKeys = new HashSet<int>();
@@ -93,10 +131,42 @@ public class GameManager : MonoBehaviourPunCallbacks
         int key = CellKey(r, c);
         pieceMap[key] = piece;
 
-        // ✅ If win RPC arrived before this piece registered, glow now
         if (pendingGlowKeys.Contains(key))
-        {
             piece.SetGlow(true);
+    }
+
+    // ================================================================
+    // TURN INDICATOR
+    // ================================================================
+    private void UpdateTurnIndicatorUI()
+    {
+        if (isGameOver)
+        {
+            SetTurnDiscState(redTurnDisc, redTurnOutline, false);
+            SetTurnDiscState(yellowTurnDisc, yellowTurnOutline, false);
+            return;
+        }
+
+        bool redOn = (currentTurn == PlayerAlliance.RED);
+        bool yellowOn = (currentTurn == PlayerAlliance.BLACK);
+
+        SetTurnDiscState(redTurnDisc, redTurnOutline, redOn);
+        SetTurnDiscState(yellowTurnDisc, yellowTurnOutline, yellowOn);
+    }
+
+    private void SetTurnDiscState(Image disc, Outline outline, bool on)
+    {
+        if (disc != null)
+        {
+            Color c = disc.color;
+            c.a = on ? onAlpha : offAlpha;
+            disc.color = c;
+        }
+
+        if (outline != null)
+        {
+            outline.enabled = on;
+            outline.effectDistance = on ? glowOutlineSize : offOutlineSize;
         }
     }
 
@@ -113,7 +183,6 @@ public class GameManager : MonoBehaviourPunCallbacks
         EnsureColumnHighlightsExist();
         HideAllColumnHighlights();
 
-        // ✅ hide end screen at start
         if (endScreenPanel != null) endScreenPanel.SetActive(false);
 
         if (winnerText != null)
@@ -122,7 +191,11 @@ public class GameManager : MonoBehaviourPunCallbacks
             winnerText.text = "";
         }
 
-        if (PhotonNetwork.InRoom)
+        if (modeSelectPanel != null)
+            modeSelectPanel.SetActive(true);
+
+        // If we entered this scene while already in a room (multiplayer flow)
+        if (currentMode == GameMode.Multiplayer && PhotonNetwork.InRoom)
         {
             if (PhotonNetwork.IsMasterClient)
             {
@@ -134,13 +207,16 @@ public class GameManager : MonoBehaviourPunCallbacks
             LoadBoardFromProperty();
         }
 
+        UpdateTurnIndicatorUI();
         UpdateStatus();
         UpdateUndoButtonState(false);
+        if (modeSelectPanel != null) modeSelectPanel.SetActive(true);
+        if (bgPanel != null) bgPanel.SetActive(false);   // ✅ hide bg until mode chosen
+
     }
 
     private void InitializeGame()
     {
-        // Create the appropriate game based on connectType
         currentGame = connectType switch
         {
             ConnectType.Connect4 => new Connect4Game(),
@@ -148,22 +224,113 @@ public class GameManager : MonoBehaviourPunCallbacks
             _ => new Connect4Game()
         };
 
-        // Create board
         GameBoard = currentGame.CreateBoard();
 
         isGameOver = false;
         localClickLock = false;
 
-        // ✅ ADDED: clear local maps so a fresh match doesn't keep old refs
         pieceMap.Clear();
         pendingGlowKeys.Clear();
 
-        // Validate UI references match board size
         if (rowRects != null && rowRects.Length != GameBoard.NumRows)
             Debug.LogWarning($"Row rects count ({rowRects.Length}) doesn't match board rows ({GameBoard.NumRows})");
 
         if (columnRects != null && columnRects.Length != GameBoard.NumCols)
-            Debug.LogWarning($"Column rects count ({columnRects.Length}) doesn't match board columns ({GameBoard.NumCols})");
+            Debug.LogWarning($"Column rects count ({columnRects.Length}) doesn't match board cols ({GameBoard.NumCols})");
+    }
+
+    // ================================================================
+    // MODE BUTTON HOOKS
+    // ================================================================
+    public void OnMode_VsAI()
+    {
+        currentMode = GameMode.VsAI;
+        BeginLocalMode();
+    }
+
+    public void OnMode_PassAndPlay()
+    {
+        currentMode = GameMode.PassAndPlay;
+        BeginLocalMode();
+    }
+
+    public void OnMode_Multiplayer()
+    {
+        currentMode = GameMode.Multiplayer;
+
+        // cancel any local routines
+        CancelLocalCoroutines();
+
+        if (modeSelectPanel != null) modeSelectPanel.SetActive(false);
+
+        UpdateTurnIndicatorUI();
+        UpdateStatus();
+        if (modeSelectPanel != null) modeSelectPanel.SetActive(false);
+        if (bgPanel != null) bgPanel.SetActive(true);
+
+    }
+
+    private void BeginLocalMode()
+    {
+        // ✅ cancel any running local drop coroutine BEFORE destroying UI
+        CancelLocalCoroutines();
+
+        // leave room if needed (async)
+        if (PhotonNetwork.InRoom)
+            PhotonNetwork.LeaveRoom();
+
+        InitializeGame();
+        ClearAllPiecesLocalUI();
+
+        HideAllColumnHighlights();
+        HideWinLine();
+        if (winnerText != null) winnerText.text = "";
+        if (endScreenPanel != null) endScreenPanel.SetActive(false);
+
+        currentTurn = PlayerAlliance.RED;
+        isGameOver = false;
+        localClickLock = false;
+
+        if (modeSelectPanel != null) modeSelectPanel.SetActive(false);
+
+        UpdateTurnIndicatorUI();
+        UpdateStatus();
+        if (modeSelectPanel != null) modeSelectPanel.SetActive(false);
+        if (bgPanel != null) bgPanel.SetActive(true);   // ✅ show bg panel now
+
+    }
+
+    private void CancelLocalCoroutines()
+    {
+        // ✅ invalidate all old coroutines immediately
+        localRunToken++;
+
+        if (localMoveCoroutine != null)
+        {
+            StopCoroutine(localMoveCoroutine);
+            localMoveCoroutine = null;
+        }
+
+        localClickLock = false;
+    }
+
+    private void ClearAllPiecesLocalUI()
+    {
+        if (piecesParent == null) return;
+
+        for (int i = piecesParent.childCount - 1; i >= 0; i--)
+        {
+            Transform ch = piecesParent.GetChild(i);
+            if (!ch) continue;
+
+            // Keep WinLineImage if it exists under piecesParent
+            if (winLineImage != null && ch == winLineImage.transform) continue;
+
+            // If it has PhotonView, don't destroy here (Photon handles it)
+            if (ch.GetComponent<PhotonView>() != null) continue;
+
+            Destroy(ch.gameObject);
+        }
     }
 
     // ================================================================
@@ -172,7 +339,17 @@ public class GameManager : MonoBehaviourPunCallbacks
     public void MakeMove(int column)
     {
         if (localClickLock) return;
+        if (isGameOver) return;
 
+        // ✅ LOCAL MODES
+        if (currentMode == GameMode.VsAI || currentMode == GameMode.PassAndPlay)
+        {
+            if (localMoveCoroutine != null) StopCoroutine(localMoveCoroutine);
+            localMoveCoroutine = StartCoroutine(LocalMakeMoveRoutine(column, ++localRunToken));
+            return;
+        }
+
+        // ✅ MULTIPLAYER
         if (!PhotonNetwork.IsConnected || !PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null)
         {
             SetStatus("Connecting...");
@@ -193,7 +370,6 @@ public class GameManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        // Use dynamic board size
         if (column < 0 || column >= GameBoard.NumCols) return;
 
         if (photonView == null || photonView.ViewID == 0)
@@ -206,6 +382,225 @@ public class GameManager : MonoBehaviourPunCallbacks
         photonView.RPC(nameof(RPC_RequestMove), RpcTarget.MasterClient, column, PhotonNetwork.LocalPlayer.ActorNumber);
     }
 
+    private IEnumerator LocalMakeMoveRoutine(int column, int runToken)
+    {
+        if (runToken != localRunToken) yield break;
+        if (column < 0 || column >= GameBoard.NumCols) yield break;
+
+        int dropRow = FindDropRow(column);
+        if (dropRow < 0) yield break;
+
+        localClickLock = true;
+
+        // Place piece on board
+        GameBoard.SetPiece(column, currentTurn);
+
+        // Column highlight
+        RPC_SetColumnHighlight(column, true);
+
+        // Spawn local UI piece + animate drop
+        yield return StartCoroutine(SpawnPiece_Local(column, dropRow, currentTurn, runToken));
+
+        if (runToken != localRunToken) yield break; // game reset while dropping
+
+        // After it lands, clear highlight
+        ClearColumnHighlightLocal(column);
+
+        // Check win
+        if (currentGame.IsGameFinished(GameBoard))
+        {
+            isGameOver = true;
+
+            var winCells = currentGame.GetWinningCells(GameBoard);
+
+            if (winnerText != null)
+            {
+                winnerText.gameObject.SetActive(true);
+                winnerText.text = (currentTurn == PlayerAlliance.RED) ? "RED WON" : "YELLOW WON";
+                winnerText.ForceMeshUpdate(true, true);
+                winnerText.transform.SetAsLastSibling();
+            }
+
+            Vector2 aAnch = GetAnchoredPosForCell(winCells[0].x, winCells[0].y);
+            Vector2 bAnch = GetAnchoredPosForCell(winCells[winCells.Count - 1].x, winCells[winCells.Count - 1].y);
+            ShowWinLineBetweenAnchors(aAnch, bAnch);
+
+            SetStatus("Game Over");
+            UpdateTurnIndicatorUI();
+
+            if (endScreenPanel != null)
+            {
+                if (currentMode == GameMode.VsAI)
+                {
+                    bool didHumanWin = (currentTurn == PlayerAlliance.RED);
+                    if (endScreenImage != null)
+                    {
+                        endScreenImage.sprite = didHumanWin ? youWinSprite : youLostSprite;
+                        endScreenImage.preserveAspect = true;
+                    }
+                }
+                endScreenPanel.SetActive(true);
+            }
+
+            localClickLock = false;
+            yield break;
+        }
+
+        // Switch turn
+        currentTurn = (currentTurn == PlayerAlliance.RED) ? PlayerAlliance.BLACK : PlayerAlliance.RED;
+        UpdateTurnIndicatorUI();
+        UpdateStatus();
+
+        localClickLock = false;
+
+        // ✅ If VsAI, let AI play as YELLOW
+        if (currentMode == GameMode.VsAI && !isGameOver && currentTurn == PlayerAlliance.BLACK)
+        {
+            yield return new WaitForSeconds(0.15f);
+            if (runToken != localRunToken) yield break;
+
+            int aiCol = GetAIMoveColumn();
+            if (aiCol >= 0)
+            {
+                // start AI move as a new "run" (still guarded)
+                if (localMoveCoroutine != null) StopCoroutine(localMoveCoroutine);
+                localMoveCoroutine = StartCoroutine(LocalMakeMoveRoutine(aiCol, localRunToken));
+            }
+        }
+    }
+
+    private IEnumerator SpawnPiece_Local(int column, int row, PlayerAlliance alliance, int runToken)
+    {
+        if (runToken != localRunToken) yield break;
+        if (!piecesParent) yield break;
+
+        GameObject prefab = (alliance == PlayerAlliance.RED) ? localRedPiecePrefab : localYellowPiecePrefab;
+        if (prefab == null)
+        {
+            Debug.LogWarning("[GM] Local piece prefab missing. Assign localRedPiecePrefab/localYellowPiecePrefab.");
+            yield break;
+        }
+
+        GameObject go = Instantiate(prefab, piecesParent);
+        if (!go) yield break;
+
+        RectTransform rt = go.GetComponent<RectTransform>();
+        if (rt == null) rt = go.AddComponent<RectTransform>();
+
+        rt.localScale = Vector3.one;
+        rt.localRotation = Quaternion.identity;
+
+        Vector2 target = GetAnchoredPosForCell(row, column);
+        float startY = GetLocalDropStartHeight();
+
+        if (!rt) yield break;
+        rt.anchoredPosition = new Vector2(target.x, startY);
+        go.transform.SetAsLastSibling();
+
+        while (true)
+        {
+            // ✅ IMPORTANT: stops MissingReferenceException if object got destroyed mid-drop
+            if (runToken != localRunToken) yield break;
+            if (!rt) yield break;
+
+            Vector2 cur = rt.anchoredPosition;
+            if ((cur - target).sqrMagnitude <= 0.25f) break;
+
+            rt.anchoredPosition = Vector2.MoveTowards(cur, target, localDropSpeed * Time.deltaTime);
+            yield return null;
+        }
+
+        if (rt) rt.anchoredPosition = target;
+    }
+
+    private float GetLocalDropStartHeight()
+    {
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas != null)
+        {
+            RectTransform canvasRT = canvas.transform as RectTransform;
+            if (canvasRT != null) return (canvasRT.rect.height * 0.5f) + localDropStartPadding;
+            return (canvas.pixelRect.height * 0.5f) + localDropStartPadding;
+        }
+
+        RectTransform parent = piecesParent;
+        if (parent != null) return (parent.rect.height * 0.5f) + localDropStartPadding;
+        return 600f;
+    }
+
+    // ================================================================
+    // SIMPLE AI
+    // ================================================================
+    private int GetAIMoveColumn()
+    {
+        int winCol = FindWinningMoveFor(PlayerAlliance.BLACK);
+        if (winCol >= 0) return winCol;
+
+        int blockCol = FindWinningMoveFor(PlayerAlliance.RED);
+        if (blockCol >= 0) return blockCol;
+
+        List<int> valid = new List<int>();
+        for (int c = 0; c < GameBoard.NumCols; c++)
+            if (FindDropRow(c) >= 0) valid.Add(c);
+
+        if (valid.Count == 0) return -1;
+        return valid[Random.Range(0, valid.Count)];
+    }
+
+    private int FindWinningMoveFor(PlayerAlliance who)
+    {
+        string backup = SerializeBoardToString();
+
+        for (int c = 0; c < GameBoard.NumCols; c++)
+        {
+            if (FindDropRow(c) < 0) continue;
+
+            GameBoard.SetPiece(c, who);
+            bool wins = currentGame.IsGameFinished(GameBoard);
+
+            LoadBoardFromString(backup);
+
+            if (wins) return c;
+        }
+        return -1;
+    }
+
+    private string SerializeBoardToString()
+    {
+        System.Text.StringBuilder sb = new System.Text.StringBuilder(GameBoard.NumRows * GameBoard.NumCols);
+        for (int r = 0; r < GameBoard.NumRows; r++)
+        {
+            for (int c = 0; c < GameBoard.NumCols; c++)
+            {
+                Tile tile = GameBoard.Table[r, c];
+                if (tile == Tile.EMPTY) sb.Append('0');
+                else if (tile == Tile.RED) sb.Append('1');
+                else sb.Append('2');
+            }
+        }
+        return sb.ToString();
+    }
+
+    private void LoadBoardFromString(string s)
+    {
+        if (string.IsNullOrEmpty(s) || s.Length != GameBoard.NumRows * GameBoard.NumCols) return;
+
+        int idx = 0;
+        for (int r = 0; r < GameBoard.NumRows; r++)
+        {
+            for (int c = 0; c < GameBoard.NumCols; c++)
+            {
+                char ch = s[idx++];
+                if (ch == '1') GameBoard.Table[r, c] = Tile.RED;
+                else if (ch == '2') GameBoard.Table[r, c] = Tile.BLACK;
+                else GameBoard.Table[r, c] = Tile.EMPTY;
+            }
+        }
+    }
+
+    // ================================================================
+    // MULTIPLAYER INPUT CHECK
+    // ================================================================
     private bool CanLocalPlayerInput()
     {
         if (isGameOver) return false;
@@ -220,7 +615,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     }
 
     // ================================================================
-    // MASTER AUTHORITATIVE MOVE
+    // MASTER AUTHORITATIVE MOVE (MULTIPLAYER)
     // ================================================================
     [PunRPC]
     private void RPC_RequestMove(int column, int senderActor, PhotonMessageInfo info)
@@ -257,15 +652,12 @@ public class GameManager : MonoBehaviourPunCallbacks
             SpawnPiece_MasterOnly(column, dropRow, currentTurn);
             SetBoardProperty();
 
-            // ✅ WIN CHECK using current game's logic
             if (currentGame.IsGameFinished(GameBoard))
             {
                 isGameOver = true;
 
-                // Get winning cells from current game
                 var winCells = currentGame.GetWinningCells(GameBoard);
 
-                // Convert to arrays for RPC
                 int[] rows = new int[winCells.Count];
                 int[] cols = new int[winCells.Count];
                 for (int i = 0; i < winCells.Count; i++)
@@ -275,7 +667,6 @@ public class GameManager : MonoBehaviourPunCallbacks
                 }
                 photonView.RPC(nameof(RPC_GlowWinningPieces), RpcTarget.AllBuffered, rows, cols);
 
-                // Get line endpoints for UI
                 Vector2 aAnch = GetAnchoredPosForCell(winCells[0].x, winCells[0].y);
                 Vector2 bAnch = GetAnchoredPosForCell(winCells[winCells.Count - 1].x, winCells[winCells.Count - 1].y);
 
@@ -312,10 +703,8 @@ public class GameManager : MonoBehaviourPunCallbacks
     private int FindDropRow(int column)
     {
         for (int r = GameBoard.NumRows - 1; r >= 0; r--)
-        {
             if (GameBoard.Table[r, column] == Tile.EMPTY)
                 return r;
-        }
         return -1;
     }
 
@@ -327,6 +716,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     {
         currentTurn = (turnB == 0) ? PlayerAlliance.RED : PlayerAlliance.BLACK;
         UpdateStatus();
+        UpdateTurnIndicatorUI();
         localClickLock = false;
     }
 
@@ -355,15 +745,17 @@ public class GameManager : MonoBehaviourPunCallbacks
         Vector2 b = new Vector2(bx, by);
         ShowWinLineBetweenAnchors(a, b);
 
-        // ✅ show win/lose panel locally
-        StartCoroutine(ShowEndScreenDelayed(winnerAlliance, 2f));
+        UpdateTurnIndicatorUI();
 
+        StartCoroutine(ShowEndScreenDelayed(winnerAlliance, 2f));
         localClickLock = false;
     }
 
-    // ✅ Home Button hook
     public void OnHomePressed()
     {
+        // ✅ cancel local routines to avoid MissingReferenceException during scene change
+        CancelLocalCoroutines();
+
         if (PhotonNetwork.InRoom)
         {
             PhotonNetwork.RemoveRPCs(photonView);
@@ -377,6 +769,8 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     public override void OnLeftRoom()
     {
+        // If we left because we picked local mode, do NOT force home.
+        if (currentMode == GameMode.VsAI || currentMode == GameMode.PassAndPlay) return;
         LoadHomeScene();
     }
 
@@ -385,7 +779,6 @@ public class GameManager : MonoBehaviourPunCallbacks
         SceneManager.LoadScene("MainMenu");
     }
 
-    // ✅ End Screen logic
     private void ShowEndScreen(PlayerAlliance winnerAlliance)
     {
         if (endScreenPanel == null || endScreenImage == null) return;
@@ -399,9 +792,15 @@ public class GameManager : MonoBehaviourPunCallbacks
         endScreenPanel.SetActive(true);
     }
 
-    // ✅ Play Again Button hook (NOW: requires BOTH players to press)
     public void OnPlayAgainPressed()
     {
+        // Local modes: restart locally
+        if (currentMode == GameMode.VsAI || currentMode == GameMode.PassAndPlay)
+        {
+            BeginLocalMode();
+            return;
+        }
+
         if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return;
         if (PhotonNetwork.CurrentRoom.PlayerCount < 2)
         {
@@ -409,10 +808,7 @@ public class GameManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        // Set my "pressed" bit in room properties
         SetRestartPressedBitLocal();
-
-        // Optional feedback
         SetStatus("Waiting for both players...");
     }
 
@@ -436,11 +832,8 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[PROP_RESTART_MASK] = newMask;
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
 
-        // If I'm master and both already pressed, restart immediately
         if (PhotonNetwork.IsMasterClient && newMask == 3)
-        {
             RestartMatch_MasterOnly();
-        }
     }
 
     private void RestartMatch_MasterOnly()
@@ -449,47 +842,34 @@ public class GameManager : MonoBehaviourPunCallbacks
         if (PhotonNetwork.CurrentRoom == null) return;
         if (PhotonNetwork.CurrentRoom.PlayerCount < 2) return;
 
-        // ✅ IMPORTANT: destroy room-spawned pieces first (RoomObjects survive scene reload)
         DestroyAllSpawnedPieces_MasterOnly();
-
-        // 1) Clear buffered RPCs (old win line / glow etc.)
         PhotonNetwork.RemoveRPCs(photonView);
-
-        // 2) Reset room properties + master local state
         ResetRoomState_MasterOnly();
 
-        // 3) Reload scene for everyone
         photonView.RPC(nameof(RPC_ReloadScene), RpcTarget.All);
     }
-
 
     private void ResetRoomState_MasterOnly()
     {
         if (!PhotonNetwork.IsMasterClient) return;
         if (PhotonNetwork.CurrentRoom == null) return;
 
-        // Reset local state
         isGameOver = false;
         localClickLock = false;
         currentTurn = PlayerAlliance.RED;
 
-        // Reset local board + clear maps
         InitializeGame();
 
-        // Hide end screen locally on master
         if (endScreenPanel != null) endScreenPanel.SetActive(false);
 
-        // Hide win line / winner text locally on master
         HideWinLine();
         if (winnerText != null) winnerText.text = "";
 
-        // Reset props
         var props = new Hashtable();
         props[PROP_READY] = (PhotonNetwork.CurrentRoom.PlayerCount >= 2) ? 1 : 0;
-        props[PROP_TURN] = 0; // RED starts
-        props[PROP_RESTART_MASK] = 0; // ✅ IMPORTANT: clear handshake
+        props[PROP_TURN] = 0;
+        props[PROP_RESTART_MASK] = 0;
 
-        // Empty board string
         System.Text.StringBuilder sb = new System.Text.StringBuilder(GameBoard.NumRows * GameBoard.NumCols);
         for (int r = 0; r < GameBoard.NumRows; r++)
             for (int c = 0; c < GameBoard.NumCols; c++)
@@ -500,31 +880,31 @@ public class GameManager : MonoBehaviourPunCallbacks
         props["BOARD_COLS"] = GameBoard.NumCols;
 
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+
         HideAllColumnHighlights();
         HideWinLine();
         if (winnerText != null) winnerText.text = "";
 
+        UpdateTurnIndicatorUI();
     }
 
     [PunRPC]
     private void RPC_ReloadScene()
     {
-        // Local UI reset (client side)
         isGameOver = false;
         localClickLock = false;
 
-        // Clear local cached piece refs / glow state
         pieceMap.Clear();
         pendingGlowKeys.Clear();
 
-        // Hide end screen locally
         if (endScreenPanel != null) endScreenPanel.SetActive(false);
 
-        // Hide win line + winner text locally
         HideWinLine();
         if (winnerText != null) winnerText.text = "";
 
-        // Reload current scene
+        currentTurn = PlayerAlliance.RED;
+        UpdateTurnIndicatorUI();
+
         PhotonNetwork.LoadLevel(SceneManager.GetActiveScene().name);
     }
 
@@ -590,9 +970,6 @@ public class GameManager : MonoBehaviourPunCallbacks
     public string BlackPiecePrefabName;
     public string RedPiecePrefabName;
 
-    // ================================================================
-    // PIECE SPAWN (MASTER ONLY)
-    // ================================================================
     private void SpawnPiece_MasterOnly(int column, int row, PlayerAlliance alliance)
     {
         if (!PhotonNetwork.IsMasterClient) return;
@@ -600,7 +977,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         Vector2 anchoredPosition = GetAnchoredPosForCell(row, column);
         string prefabName = (alliance == PlayerAlliance.BLACK) ? BlackPiecePrefabName : RedPiecePrefabName;
 
-        PhotonView parentPhotonView = piecesParent.GetComponent<PhotonView>();
+        PhotonView parentPhotonView = piecesParent != null ? piecesParent.GetComponent<PhotonView>() : null;
         int parentViewID = parentPhotonView != null ? parentPhotonView.ViewID : 0;
 
         PhotonNetwork.InstantiateRoomObject(
@@ -614,19 +991,37 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     private Vector2 GetAnchoredPosForCell(int boardRow, int boardCol)
     {
+        if (piecesParent == null || columnRects == null || rowRects == null) return Vector2.zero;
+        if (boardCol < 0 || boardCol >= columnRects.Length) return Vector2.zero;
+
         int uiRowIndex = GameBoard.NumRows - boardRow - 1;
-        if (boardCol < columnRects.Length && uiRowIndex < rowRects.Length)
+        if (uiRowIndex < 0 || uiRowIndex >= rowRects.Length) return Vector2.zero;
+
+        RectTransform colRT = columnRects[boardCol];
+        RectTransform rowRT = rowRects[uiRowIndex];
+        if (colRT == null || rowRT == null) return Vector2.zero;
+
+        // ✅ Use world positions (stable across different parents)
+        Vector3 worldPoint = new Vector3(colRT.position.x, rowRT.position.y, 0f);
+
+        Canvas canvas = piecesParent.GetComponentInParent<Canvas>();
+        Camera cam = null;
+        if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            cam = canvas.worldCamera;
+
+        // Convert world -> screen -> local point in piecesParent
+        Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(cam, worldPoint);
+
+        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                piecesParent, screenPoint, cam, out Vector2 localPoint))
         {
-            RectTransform col = columnRects[boardCol];
-            RectTransform row = rowRects[uiRowIndex];
-            return new Vector2(col.anchoredPosition.x, row.anchoredPosition.y);
+            return localPoint;
         }
+
         return Vector2.zero;
     }
 
-    // ================================================================
-    // WIN LINE UI IMAGE
-    // ================================================================
+
     private void EnsureWinLineImageExists()
     {
         if (winLineImage != null && winLineImgComponent != null) return;
@@ -634,7 +1029,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         if (winLineImage == null)
         {
             GameObject go = new GameObject("WinLineImage", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            go.transform.SetParent(piecesParent, false);
+            if (piecesParent != null) go.transform.SetParent(piecesParent, false);
 
             winLineImage = go.GetComponent<RectTransform>();
             winLineImgComponent = go.GetComponent<Image>();
@@ -677,12 +1072,9 @@ public class GameManager : MonoBehaviourPunCallbacks
         winLineImage.localRotation = Quaternion.Euler(0f, 0f, angle);
     }
 
-    // ================================================================
-    // COLUMN HIGHLIGHT SETUP
-    // ================================================================
     private void EnsureColumnHighlightsExist()
     {
-        if (boardSpaceRoot == null) return;
+        if (boardSpaceRoot == null || GameBoard == null) return;
 
         if (columnHighlights != null && columnHighlights.Length == GameBoard.NumCols)
             return;
@@ -704,10 +1096,16 @@ public class GameManager : MonoBehaviourPunCallbacks
             rt.anchorMax = new Vector2(0.5f, 1f);
             rt.pivot = new Vector2(0.5f, 0.5f);
 
-            float width = (columnRects != null && columnRects.Length > c) ? Mathf.Max(60f, columnRects[c].rect.width) : 80f;
+            float width = (columnRects != null && columnRects.Length > c && columnRects[c] != null)
+                ? Mathf.Max(60f, columnRects[c].rect.width)
+                : 80f;
+
             rt.sizeDelta = new Vector2(width, 0f);
 
-            float x = (columnRects != null && columnRects.Length > c) ? columnRects[c].anchoredPosition.x : 0f;
+            float x = (columnRects != null && columnRects.Length > c && columnRects[c] != null)
+                ? columnRects[c].anchoredPosition.x
+                : 0f;
+
             rt.anchoredPosition = new Vector2(x, 0f);
 
             go.SetActive(false);
@@ -724,7 +1122,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     }
 
     // ================================================================
-    // ROOM PROPERTIES / STATUS
+    // ROOM PROPERTIES / STATUS (MULTIPLAYER)
     // ================================================================
     private void EnsureRoomPropertiesExist()
     {
@@ -742,7 +1140,6 @@ public class GameManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(PROP_BOARD))
             SetBoardProperty();
 
-        // ✅ ADDED: restart prop init
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(PROP_RESTART_MASK))
         {
             var p = new Hashtable();
@@ -814,6 +1211,8 @@ public class GameManager : MonoBehaviourPunCallbacks
         {
             currentTurn = PlayerAlliance.RED;
         }
+
+        UpdateTurnIndicatorUI();
     }
 
     private void SetBoardProperty()
@@ -843,16 +1242,6 @@ public class GameManager : MonoBehaviourPunCallbacks
     private void LoadBoardFromProperty()
     {
         if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return;
-
-        // Check if game type matches
-        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(PROP_GAME_TYPE, out object typeObj))
-        {
-            ConnectType storedType = (ConnectType)(byte)typeObj;
-            if (storedType != connectType)
-            {
-                Debug.LogWarning($"Stored game type ({storedType}) doesn't match local ({connectType})");
-            }
-        }
 
         if (!PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(PROP_BOARD, out object val))
             return;
@@ -884,7 +1273,6 @@ public class GameManager : MonoBehaviourPunCallbacks
             UpdateStatus();
         }
 
-        // ✅ ADDED: if both pressed Play Again, master starts restart
         if (propertiesThatChanged.ContainsKey(PROP_RESTART_MASK))
         {
             if (PhotonNetwork.IsMasterClient && PhotonNetwork.CurrentRoom != null &&
@@ -901,11 +1289,11 @@ public class GameManager : MonoBehaviourPunCallbacks
         if (statusText != null) statusText.text = msg;
         else if (!string.IsNullOrEmpty(msg)) Debug.Log(msg);
     }
+
     private void DestroyAllSpawnedPieces_MasterOnly()
     {
         if (!PhotonNetwork.IsMasterClient) return;
 
-        // Your piece prefabs have Connect4Piece on them, so this is safe.
         Connect4Piece[] allPieces = FindObjectsOfType<Connect4Piece>(true);
 
         for (int i = 0; i < allPieces.Length; i++)
@@ -914,21 +1302,33 @@ public class GameManager : MonoBehaviourPunCallbacks
 
             PhotonView pv = allPieces[i].GetComponent<PhotonView>();
 
-            // RoomObject = pv.IsRoomView == true
             if (pv != null && pv.IsRoomView)
-            {
-                PhotonNetwork.Destroy(pv); // destroys for everyone
-            }
+                PhotonNetwork.Destroy(pv);
             else
-            {
-                Destroy(allPieces[i].gameObject); // fallback for non-networked
-            }
+                Destroy(allPieces[i].gameObject);
         }
     }
 
-
     private void UpdateStatus()
     {
+        // ✅ LOCAL MODES
+        if (currentMode == GameMode.VsAI || currentMode == GameMode.PassAndPlay)
+        {
+            if (isGameOver)
+            {
+                SetStatus("Game Over");
+                return;
+            }
+
+            if (currentMode == GameMode.VsAI)
+                SetStatus(currentTurn == PlayerAlliance.RED ? "Your turn" : "AI thinking...");
+            else
+                SetStatus(currentTurn == PlayerAlliance.RED ? "RED's turn" : "YELLOW's turn");
+
+            return;
+        }
+
+        // ✅ MULTIPLAYER
         if (!PhotonNetwork.IsConnected || !PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null)
         {
             SetStatus("Connecting...");
@@ -970,6 +1370,8 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinedRoom()
     {
+        if (currentMode != GameMode.Multiplayer) return;
+
         if (PhotonNetwork.IsMasterClient)
         {
             EnsureRoomPropertiesExist();
@@ -980,9 +1382,10 @@ public class GameManager : MonoBehaviourPunCallbacks
         LoadBoardFromProperty();
         UpdateStatus();
     }
-
-    public override void OnPlayerEnteredRoom(Photon.Realtime.Player newPlayer)
+public override void OnPlayerEnteredRoom(Photon.Realtime.Player newPlayer)
     {
+        if (currentMode != GameMode.Multiplayer) return;
+
         if (PhotonNetwork.IsMasterClient)
             MasterUpdateReadyAndInitTurn();
 
@@ -991,11 +1394,12 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     public override void OnPlayerLeftRoom(Photon.Realtime.Player otherPlayer)
     {
+        if (currentMode != GameMode.Multiplayer) return;
+
         if (PhotonNetwork.IsMasterClient)
         {
             MasterUpdateReadyAndInitTurn();
 
-            // ✅ ADDED: if someone left, clear restart handshake so it doesn't auto-restart later
             if (PhotonNetwork.CurrentRoom != null)
             {
                 var p = new Hashtable();
@@ -1010,6 +1414,8 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     public override void OnMasterClientSwitched(Photon.Realtime.Player newMasterClient)
     {
+        if (currentMode != GameMode.Multiplayer) return;
+
         if (PhotonNetwork.IsMasterClient)
         {
             EnsureRoomPropertiesExist();
