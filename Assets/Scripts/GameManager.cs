@@ -316,21 +316,21 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     private void ClearAllPiecesLocalUI()
     {
-        if (piecesParent == null) return;
-
-        for (int i = piecesParent.childCount - 1; i >= 0; i--)
-        {
-            Transform ch = piecesParent.GetChild(i);
-            if (!ch) continue;
-
-            // Keep WinLineImage if it exists under piecesParent
-            if (winLineImage != null && ch == winLineImage.transform) continue;
-
-            // If it has PhotonView, don't destroy here (Photon handles it)
-            if (ch.GetComponent<PhotonView>() != null) continue;
-
-            Destroy(ch.gameObject);
-        }
+        // if (piecesParent == null) return;
+        //
+        // for (int i = piecesParent.childCount - 1; i >= 0; i--)
+        // {
+        //     Transform ch = piecesParent.GetChild(i);
+        //     if (!ch) continue;
+        //
+        //     // Keep WinLineImage if it exists under piecesParent
+        //     if (winLineImage != null && ch == winLineImage.transform) continue;
+        //
+        //     // If it has PhotonView, don't destroy here (Photon handles it)
+        //     if (ch.GetComponent<PhotonView>() != null) continue;
+        //
+        //     Destroy(ch.gameObject);
+        // }
     }
 
     // ================================================================
