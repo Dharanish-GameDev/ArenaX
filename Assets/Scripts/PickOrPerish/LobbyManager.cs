@@ -34,7 +34,7 @@ public class LobbyManager : MonoBehaviour
 
 
     // Hidden in Inspector
-    private int maxConnections = 4;
+    private int maxConnections = 2;
     private readonly string lobbyName = "PickOrPerish";
     private readonly string startGameDataKey = "START_GAME";
     private Lobby hostLobby;
@@ -51,6 +51,8 @@ public class LobbyManager : MonoBehaviour
     // Test Variables Must Be removed
     private string testName = "Test";
     private bool isAuthenticated = false;
+
+    public int MaxConnections => maxConnections;
 
     #endregion
 

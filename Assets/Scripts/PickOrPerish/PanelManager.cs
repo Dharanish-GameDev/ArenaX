@@ -35,6 +35,8 @@ public class PanelManager : MonoBehaviour
     [SerializeField] private Button startMatchButton;
 
     [SerializeField] private TextMeshProUGUI timerText;
+    
+    [SerializeField] private GameObject waitingUIObj;
 
     private void Awake()
     {
@@ -95,6 +97,14 @@ public class PanelManager : MonoBehaviour
     {
         PlayerUISet temp = Instantiate(playerUISetRef, playerUISetsParent);
         return temp;
+    }
+
+    public void DisableWaitingScreen()
+    {
+        if (waitingUIObj != null)
+        {
+            waitingUIObj.SetActive(false);
+        }
     }
 
     private void OnRoundValueChanged(int previousRound, int currentRound)

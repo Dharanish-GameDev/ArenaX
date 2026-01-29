@@ -118,10 +118,15 @@ public class FacebookManager : MonoBehaviour
     //login
     public void Facebook_LogIn()
     {
+#if UNITY_ANDROID && !UNITY_EDITOR
         List<string> permissions = new List<string>();
         permissions.Add("public_profile");
         //permissions.Add("user_friends");
         FB.LogInWithReadPermissions(permissions, AuthCallBack);
+#else
+
+        LoginManager.instance.TriggerLoginEvent();
+#endif
 
     }
     void AuthCallBack(IResult result)
@@ -138,6 +143,7 @@ public class FacebookManager : MonoBehaviour
             {
                 print(perm);
             }
+            LoginManager.instance.TriggerLoginEvent();
         }
         else
         {

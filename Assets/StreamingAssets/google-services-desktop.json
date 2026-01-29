@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "773319435632",
+    "project_id": "arenax-fa2fd",
+    "storage_bucket": "arenax-fa2fd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:773319435632:android:e6b2bc463e0cda90ed5bb5",
+        "android_client_info": {
+          "package_name": "com.DefaultCompany.ArenaX"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "773319435632-f41ivp18u34mmj4hl3at5eur0tkemhp2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.DefaultCompany.ArenaX",
+            "certificate_hash": "92dbe6f9fb6990102716fc7f54ef37934d32f505"
+          }
+        },
+        {
+          "client_id": "773319435632-bp3t6vdb82ju0u4segtpftkq40pcu3o7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBuLtvqwqdvX5618s4m-StnsppA6l_lxTo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "773319435632-bp3t6vdb82ju0u4segtpftkq40pcu3o7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
