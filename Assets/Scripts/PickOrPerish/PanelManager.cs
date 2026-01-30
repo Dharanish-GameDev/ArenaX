@@ -35,8 +35,10 @@ public class PanelManager : MonoBehaviour
     [SerializeField] private Button startMatchButton;
 
     [SerializeField] private TextMeshProUGUI timerText;
-    
+
     [SerializeField] private GameObject waitingUIObj;
+    [SerializeField] private float winnerAnnouncementDelay = 2f;
+
 
     private void Awake()
     {
@@ -63,7 +65,15 @@ public class PanelManager : MonoBehaviour
 
     public void AnnounceWinner(int winnerId)
     {
+        StartCoroutine(AnnounceWinnerDelayed(winnerId));
+    }
+
+    private IEnumerator AnnounceWinnerDelayed(int winnerId)
+    {
+        yield return new WaitForSeconds(winnerAnnouncementDelay);
+
         winnerAnnouncementPanel.gameObject.SetActive(true);
+
         if (winnerId == (int)NetworkManager.Singleton.LocalClientId)
         {
             Debug.Log("I Win");
@@ -77,6 +87,7 @@ public class PanelManager : MonoBehaviour
             loserUIObj.SetActive(true);
         }
     }
+
 
     public void EnableTimerText()
     {
