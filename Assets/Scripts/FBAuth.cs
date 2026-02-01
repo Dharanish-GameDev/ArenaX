@@ -10,10 +10,6 @@ using System;
 
 public class FacebookManager : MonoBehaviour
 {
-    public TextMeshProUGUI FB_userName;
-    //public Image FB_profilePic;
-    public RawImage rawImg;
-
     #region Initialize
 
     private void Awake()
@@ -84,8 +80,7 @@ public class FacebookManager : MonoBehaviour
         if (result.Error == null)
         {
             string name = "" + result.ResultDictionary["first_name"];
-            if (FB_userName != null) FB_userName.text = name;
-            FB_userName.text = name;
+            LoginManager.instance.SetUsername(name);
             Debug.Log("" + name);
         }
         else
@@ -98,11 +93,7 @@ public class FacebookManager : MonoBehaviour
         if (result.Texture != null)
         {
             Debug.Log("Profile Pic");
-            rawImg.texture = result.Texture;
-            //if (FB_profilePic != null) FB_profilePic.sprite = Sprite.Create(result.Texture, new Rect(0, 0, 128, 128), new Vector2());
-            /*JSONObject json = new JSONObject(result.RawResult);
-
-            StartCoroutine(DownloadTexture(json["picture"]["data"]["url"].str, profile_texture));*/
+            LoginManager.instance.SetProfilePicture(result.Texture);
         }
         else
         {
@@ -170,8 +161,8 @@ public class FacebookManager : MonoBehaviour
         }
         print("Logout Successful");
         // if (FB_profilePic != null) FB_profilePic.sprite = null;
-        if (FB_userName != null) FB_userName.text = "";
-        if (rawImg != null) rawImg.texture = null;
+        LoginManager.instance.SetUsername(null);
+        LoginManager.instance.SetProfilePicture(null);
     }
 
 

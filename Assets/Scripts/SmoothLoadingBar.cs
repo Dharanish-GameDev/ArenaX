@@ -19,11 +19,7 @@ public class SmoothLoadingBar : MonoBehaviour
     private float elapsedTime = 0f;
     private bool isLoading = false;
     private bool isComplete = false;
-
-    void Start()
-    {
-        StartLoading();
-    }
+    
 
     void Update()
     {

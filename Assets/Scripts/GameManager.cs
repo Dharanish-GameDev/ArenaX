@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using Photon.Pun;
 using Photon.Realtime;
 using TMPro;
@@ -205,6 +206,10 @@ public class GameManager : MonoBehaviourPunCallbacks
 
             ReadTurnFromRoom();
             LoadBoardFromProperty();
+            
+            // Make sure game over state is false initially
+            isGameOver = false;
+            if (endScreenPanel != null) endScreenPanel.SetActive(false);
         }
 
         UpdateTurnIndicatorUI();
@@ -212,7 +217,6 @@ public class GameManager : MonoBehaviourPunCallbacks
         UpdateUndoButtonState(false);
         if (modeSelectPanel != null) modeSelectPanel.SetActive(true);
         if (bgPanel != null) bgPanel.SetActive(false);   // ✅ hide bg until mode chosen
-
     }
 
     private void InitializeGame()
@@ -237,6 +241,16 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         if (columnRects != null && columnRects.Length != GameBoard.NumCols)
             Debug.LogWarning($"Column rects count ({columnRects.Length}) doesn't match board cols ({GameBoard.NumCols})");
+
+        if (piecesParent != null)
+        {
+            Connect4Piece[] spawnedPieces = piecesParent.GetComponentsInChildren<Connect4Piece>();
+            for (int i = 0; i < spawnedPieces.Length; i++)
+            {
+                if (currentMode != GameMode.Multiplayer)
+                    Destroy(spawnedPieces[i].gameObject);
+            }
+        }
     }
 
     // ================================================================
@@ -267,7 +281,6 @@ public class GameManager : MonoBehaviourPunCallbacks
         UpdateStatus();
         if (modeSelectPanel != null) modeSelectPanel.SetActive(false);
         if (bgPanel != null) bgPanel.SetActive(true);
-
     }
 
     private void BeginLocalMode()
@@ -297,7 +310,6 @@ public class GameManager : MonoBehaviourPunCallbacks
         UpdateStatus();
         if (modeSelectPanel != null) modeSelectPanel.SetActive(false);
         if (bgPanel != null) bgPanel.SetActive(true);   // ✅ show bg panel now
-
     }
 
     private void CancelLocalCoroutines()
@@ -751,6 +763,30 @@ public class GameManager : MonoBehaviourPunCallbacks
         localClickLock = false;
     }
 
+    // NEW: RPC to reset game state for all clients
+    [PunRPC]
+    private void RPC_ResetGameState()
+    {
+        isGameOver = false;
+        localClickLock = false;
+        currentTurn = PlayerAlliance.RED;
+
+        pieceMap.Clear();
+        pendingGlowKeys.Clear();
+
+        // Clear UI elements
+        HideWinLine();
+        HideAllColumnHighlights();
+        if (winnerText != null) winnerText.text = "";
+        if (endScreenPanel != null) endScreenPanel.SetActive(false);
+
+        // Re-initialize the game board
+        InitializeGame();
+
+        UpdateTurnIndicatorUI();
+        UpdateStatus();
+    }
+
     public void OnHomePressed()
     {
         // ✅ cancel local routines to avoid MissingReferenceException during scene change
@@ -801,15 +837,25 @@ public class GameManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return;
+        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null)
+        {
+            SetStatus("Not in a room");
+            return;
+        }
+
         if (PhotonNetwork.CurrentRoom.PlayerCount < 2)
         {
             SetStatus("Waiting for opponent...");
+            // Reset the end screen if opponent left
+            if (endScreenPanel != null) endScreenPanel.SetActive(false);
             return;
         }
 
         SetRestartPressedBitLocal();
         SetStatus("Waiting for both players...");
+
+        // Immediately hide the end screen
+        if (endScreenPanel != null) endScreenPanel.SetActive(false);
     }
 
     private void SetRestartPressedBitLocal()
@@ -842,11 +888,19 @@ public class GameManager : MonoBehaviourPunCallbacks
         if (PhotonNetwork.CurrentRoom == null) return;
         if (PhotonNetwork.CurrentRoom.PlayerCount < 2) return;
 
-        DestroyAllSpawnedPieces_MasterOnly();
-        PhotonNetwork.RemoveRPCs(photonView);
+        // Reset the room properties first
         ResetRoomState_MasterOnly();
 
-        photonView.RPC(nameof(RPC_ReloadScene), RpcTarget.All);
+        // Then destroy pieces
+        DestroyAllSpawnedPieces_MasterOnly();
+
+        // Call RPC to reset all clients' state
+        photonView.RPC(nameof(RPC_ResetGameState), RpcTarget.AllBuffered);
+
+        // Clear restart mask
+        var props = new Hashtable();
+        props[PROP_RESTART_MASK] = 0;
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
     }
 
     private void ResetRoomState_MasterOnly()
@@ -882,9 +936,6 @@ public class GameManager : MonoBehaviourPunCallbacks
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
 
         HideAllColumnHighlights();
-        HideWinLine();
-        if (winnerText != null) winnerText.text = "";
-
         UpdateTurnIndicatorUI();
     }
 
@@ -1263,26 +1314,52 @@ public class GameManager : MonoBehaviourPunCallbacks
         }
     }
 
-    public override void OnRoomPropertiesUpdate(Hashtable propertiesThatChanged)
-    {
-        if (propertiesThatChanged == null) return;
-
-        if (propertiesThatChanged.ContainsKey(PROP_READY) || propertiesThatChanged.ContainsKey(PROP_TURN))
-        {
-            ReadTurnFromRoom();
-            UpdateStatus();
-        }
-
-        if (propertiesThatChanged.ContainsKey(PROP_RESTART_MASK))
-        {
-            if (PhotonNetwork.IsMasterClient && PhotonNetwork.CurrentRoom != null &&
-                PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(PROP_RESTART_MASK, out object v) &&
-                v is int mask && mask == 3)
-            {
-                RestartMatch_MasterOnly();
-            }
-        }
-    }
+   public override void OnRoomPropertiesUpdate(Hashtable propertiesThatChanged)
+   {
+       if (propertiesThatChanged == null) return;
+   
+       if (propertiesThatChanged.ContainsKey(PROP_READY) || propertiesThatChanged.ContainsKey(PROP_TURN))
+       {
+           ReadTurnFromRoom();
+           UpdateStatus();
+           UpdateTurnIndicatorUI();
+       }
+   
+       if (propertiesThatChanged.ContainsKey(PROP_BOARD))
+       {
+           // Clear local piece map when board is reset
+           if (propertiesThatChanged[PROP_BOARD] is string boardStr &&
+               boardStr.All(c => c == '0'))
+           {
+               pieceMap.Clear();
+               pendingGlowKeys.Clear();
+           }
+           LoadBoardFromProperty();
+       }
+   
+       if (propertiesThatChanged.ContainsKey(PROP_RESTART_MASK))
+       {
+           if (PhotonNetwork.IsMasterClient && PhotonNetwork.CurrentRoom != null &&
+               PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(PROP_RESTART_MASK, out object v) &&
+               v is int maskValue && maskValue == 3)
+           {
+               RestartMatch_MasterOnly();
+           }
+           else if (!PhotonNetwork.IsMasterClient)
+           {
+               // Non-master clients should also reset their state when restart mask changes
+               var restartMaskValue = PhotonNetwork.CurrentRoom.CustomProperties[PROP_RESTART_MASK] as int?;
+               if (restartMaskValue == 0)
+               {
+                   // Reset local state when mask is cleared
+                   isGameOver = false;
+                   localClickLock = false;
+                   if (endScreenPanel != null) endScreenPanel.SetActive(false);
+                   UpdateStatus();
+               }
+           }
+       }
+   }
 
     private void SetStatus(string msg)
     {
@@ -1380,9 +1457,15 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         ReadTurnFromRoom();
         LoadBoardFromProperty();
+        
+        // Ensure initial state
+        isGameOver = false;
+        if (endScreenPanel != null) endScreenPanel.SetActive(false);
+        
         UpdateStatus();
     }
-public override void OnPlayerEnteredRoom(Photon.Realtime.Player newPlayer)
+
+    public override void OnPlayerEnteredRoom(Photon.Realtime.Player newPlayer)
     {
         if (currentMode != GameMode.Multiplayer) return;
 

@@ -1,48 +1,60 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 public class MainMenu : MonoBehaviour
 {
+    [SerializeField] private GameObject loadingScreen;
+    [SerializeField] private GameObject loginScreen;
+    [SerializeField] private GameObject landingPage;
+    
+    [SerializeField] private TextMeshProUGUI profileName;
+    [SerializeField] private RawImage profileImage;
+    
+    
+    public static bool isLoadedAlready = false;
 
-    public Slider slider;
 
-    private void Start()
+    private void Awake()
     {
-        if (!PlayerPrefs.HasKey("Difficulty"))
+        if (!isLoadedAlready)
         {
-            PlayerPrefs.SetFloat("Difficulty", 1);
-        }
-    }
-
-    public void PlayGame()
-    {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex + 1);
-    }
-
-    public void QuitGame()
-    {
-        Debug.Log("Quit");
-        Application.Quit();
-    }
-
-    public void DifficultyChanged(float newDifficulty)
-    {
-        PlayerPrefs.SetFloat("Difficulty", newDifficulty);
-    }
-
-    public void SetSliderValue()
-    {
-        if (PlayerPrefs.HasKey("Difficulty"))
-        {
-            slider.value = PlayerPrefs.GetFloat("Difficulty");
+            loadingScreen.SetActive(true);
+            if (loadingScreen.TryGetComponent<SmoothLoadingBar>(out SmoothLoadingBar loadingBar))
+            {
+                loadingBar.StartLoading();
+                isLoadedAlready = true;
+            }
+            loginScreen.SetActive(false);
+            landingPage.SetActive(false);
         }
         else
         {
-            slider.value = 1;
-            PlayerPrefs.SetFloat("Difficulty", 1);
+            loadingScreen.SetActive(false);
+            landingPage.SetActive(true);
+            loginScreen.SetActive(false);
         }
+    }
+
+    private void Start()
+    {
+        if(!isLoadedAlready) return;
+        SetProfileImage(LoginManager.instance.GetProfilePicture());
+        SetProfileName(LoginManager.instance.GetUsername());
+    }
+
+    public void SetProfileName(string profileName)
+    {
+        if(!string.IsNullOrEmpty(profileName))
+            this.profileName.text = profileName;
+    }
+
+    public void SetProfileImage(Texture profileImage)
+    {
+        this.profileImage.texture = profileImage;
     }
 }

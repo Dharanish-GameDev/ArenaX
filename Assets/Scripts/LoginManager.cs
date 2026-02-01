@@ -8,20 +8,52 @@ public class LoginManager : MonoBehaviour
    
    [SerializeField] private UnityEvent OnLoginEvent;
    public event Action OnUserLogin;
+   
+   [SerializeField] private string username;
+   [SerializeField] private Texture profilePicture;
+   
 
 
    private void Awake()
    {
-      instance = this;
+      if (instance == null)
+      {
+         instance = this;
+         DontDestroyOnLoad(gameObject);
+      }
+      else
+      {
+         Destroy(gameObject);
+      }
       OnUserLogin += () =>
       {
          OnLoginEvent.Invoke();
       };
    }
-
-   [ContextMenu("Login")]
    public void TriggerLoginEvent()
    {
       OnUserLogin?.Invoke();
+   }
+   
+   public void SetUsername(string username)
+   {
+      this.username = username;
+      FindFirstObjectByType<MainMenu>(FindObjectsInactive.Include)?.SetProfileName(username);
+   }
+   
+   public void SetProfilePicture(Texture profilePicture)
+   {
+      this.profilePicture = profilePicture;
+      FindFirstObjectByType<MainMenu>(FindObjectsInactive.Include) ?.SetProfileImage(profilePicture);
+   }
+
+   public Texture GetProfilePicture()
+   {
+      return profilePicture;
+   }
+
+   public string GetUsername()
+   {
+      return username;
    }
 }

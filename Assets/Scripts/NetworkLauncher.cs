@@ -1,6 +1,7 @@
 using Photon.Pun;
 using Photon.Realtime;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class NetworkLauncher : MonoBehaviourPunCallbacks
 {
@@ -12,14 +13,34 @@ public class NetworkLauncher : MonoBehaviourPunCallbacks
     [SerializeField] private string gameVersion = "connect4_v1";
 
     private bool joining;
+    private bool intentionalDisconnect;
 
-    private void Start()
+    public void StartMultiplayer()
     {
         PhotonNetwork.AutomaticallySyncScene = false;
         PhotonNetwork.GameVersion = gameVersion;
 
         Debug.Log("[NL] Connecting... Version=" + PhotonNetwork.GameVersion);
         PhotonNetwork.ConnectUsingSettings();
+    }
+
+    // Call this method when you want to disconnect and go to MainMenu
+    public void DisconnectAndGoToMainMenu()
+    {
+        if (PhotonNetwork.IsConnected)
+        {
+            intentionalDisconnect = true;
+            PhotonNetwork.Disconnect();
+        }
+        else
+        {
+            LoadMainMenu();
+        }
+    }
+
+    private void LoadMainMenu()
+    {
+        FindFirstObjectByType<SceneLoader>(FindObjectsInactive.Include)?.LoadSceneIndex(0);
     }
 
     public override void OnConnectedToMaster()
@@ -99,9 +120,16 @@ public class NetworkLauncher : MonoBehaviourPunCallbacks
 
     public override void OnDisconnected(DisconnectCause cause)
     {
-        joining = false;
         Debug.LogError("[NL] Disconnected: " + cause);
 
+        if (intentionalDisconnect)
+        {
+            intentionalDisconnect = false;
+            LoadMainMenu();
+            return;
+        }
+
+        joining = false;
         CancelInvoke(nameof(Reconnect));
         Invoke(nameof(Reconnect), 1f);
     }
