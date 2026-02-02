@@ -1,41 +1,41 @@
 {
   "project_info": {
-    "project_number": "773319435632",
-    "project_id": "arenax-fa2fd",
-    "storage_bucket": "arenax-fa2fd.firebasestorage.app"
+    "project_number": "982688911766",
+    "project_id": "arenax-5d813",
+    "storage_bucket": "arenax-5d813.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:773319435632:android:e6b2bc463e0cda90ed5bb5",
+        "mobilesdk_app_id": "1:982688911766:android:d72f76984bfbcc35004db7",
         "android_client_info": {
-          "package_name": "com.DefaultCompany.ArenaX"
+          "package_name": "com.android.arenax"
         }
       },
       "oauth_client": [
         {
-          "client_id": "773319435632-f41ivp18u34mmj4hl3at5eur0tkemhp2.apps.googleusercontent.com",
+          "client_id": "982688911766-1fd30qdb75lbgdcjd7e561b2fpshqkrl.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.DefaultCompany.ArenaX",
-            "certificate_hash": "92dbe6f9fb6990102716fc7f54ef37934d32f505"
+            "package_name": "com.android.arenax",
+            "certificate_hash": "88c1f2347608eacd50424f94746d8a427c69f433"
           }
         },
         {
-          "client_id": "773319435632-bp3t6vdb82ju0u4segtpftkq40pcu3o7.apps.googleusercontent.com",
+          "client_id": "982688911766-n723nhqprrrhm7et50mblmagqk3d0vue.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyBuLtvqwqdvX5618s4m-StnsppA6l_lxTo"
+          "current_key": "AIzaSyCX6HBxw08RtcjFIgWh7t4X3dkhbnCGLQw"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "773319435632-bp3t6vdb82ju0u4segtpftkq40pcu3o7.apps.googleusercontent.com",
+              "client_id": "982688911766-n723nhqprrrhm7et50mblmagqk3d0vue.apps.googleusercontent.com",
               "client_type": 3
             }
           ]

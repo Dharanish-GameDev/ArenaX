@@ -14,7 +14,7 @@ public class LoginWithGoogle : MonoBehaviour
     [Header("Google OAuth")]
     [Tooltip("WEB CLIENT ID from Google Cloud Console")]
     public string GoogleAPI =
-        "773319435632-bp3t6vdb82ju0u4segtpftkq40pcu3o7.apps.googleusercontent.com";
+        "982688911766-n723nhqprrrhm7et50mblmagqk3d0vue.apps.googleusercontent.com";
 
     private GoogleSignInConfiguration configuration;
 

@@ -1,11 +1,11 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@string/gcm_defaultSenderId,@string/google_storage_bucket,@string/project_id,@string/google_api_key,@string/google_crash_reporting_api_key,@string/google_app_id,@string/default_android_client_id,@string/default_web_client_id">
-  <string name="gcm_defaultSenderId" translatable="false">773319435632</string>
-  <string name="google_storage_bucket" translatable="false">arenax-fa2fd.firebasestorage.app</string>
-  <string name="project_id" translatable="false">arenax-fa2fd</string>
-  <string name="google_api_key" translatable="false">AIzaSyBuLtvqwqdvX5618s4m-StnsppA6l_lxTo</string>
-  <string name="google_crash_reporting_api_key" translatable="false">AIzaSyBuLtvqwqdvX5618s4m-StnsppA6l_lxTo</string>
-  <string name="google_app_id" translatable="false">1:773319435632:android:e6b2bc463e0cda90ed5bb5</string>
-  <string name="default_android_client_id" translatable="false">773319435632-f41ivp18u34mmj4hl3at5eur0tkemhp2.apps.googleusercontent.com</string>
-  <string name="default_web_client_id" translatable="false">773319435632-bp3t6vdb82ju0u4segtpftkq40pcu3o7.apps.googleusercontent.com</string>
+  <string name="gcm_defaultSenderId" translatable="false">982688911766</string>
+  <string name="google_storage_bucket" translatable="false">arenax-5d813.firebasestorage.app</string>
+  <string name="project_id" translatable="false">arenax-5d813</string>
+  <string name="google_api_key" translatable="false">AIzaSyCX6HBxw08RtcjFIgWh7t4X3dkhbnCGLQw</string>
+  <string name="google_crash_reporting_api_key" translatable="false">AIzaSyCX6HBxw08RtcjFIgWh7t4X3dkhbnCGLQw</string>
+  <string name="google_app_id" translatable="false">1:982688911766:android:d72f76984bfbcc35004db7</string>
+  <string name="default_android_client_id" translatable="false">982688911766-1fd30qdb75lbgdcjd7e561b2fpshqkrl.apps.googleusercontent.com</string>
+  <string name="default_web_client_id" translatable="false">982688911766-n723nhqprrrhm7et50mblmagqk3d0vue.apps.googleusercontent.com</string>
 </resources>
