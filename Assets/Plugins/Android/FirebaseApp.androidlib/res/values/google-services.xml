@@ -5,7 +5,7 @@
   <string name="project_id" translatable="false">arenax-5d813</string>
   <string name="google_api_key" translatable="false">AIzaSyCX6HBxw08RtcjFIgWh7t4X3dkhbnCGLQw</string>
   <string name="google_crash_reporting_api_key" translatable="false">AIzaSyCX6HBxw08RtcjFIgWh7t4X3dkhbnCGLQw</string>
-  <string name="google_app_id" translatable="false">1:982688911766:android:d72f76984bfbcc35004db7</string>
-  <string name="default_android_client_id" translatable="false">982688911766-1fd30qdb75lbgdcjd7e561b2fpshqkrl.apps.googleusercontent.com</string>
+  <string name="google_app_id" translatable="false">1:982688911766:android:03d39a8d2aaca10e004db7</string>
+  <string name="default_android_client_id" translatable="false">982688911766-672lotj417geibtdml01ta88tsfm1hia.apps.googleusercontent.com</string>
   <string name="default_web_client_id" translatable="false">982688911766-n723nhqprrrhm7et50mblmagqk3d0vue.apps.googleusercontent.com</string>
 </resources>

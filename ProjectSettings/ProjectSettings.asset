@@ -166,7 +166,7 @@ PlayerSettings:
   androidMaxAspectRatio: 2.1
   androidMinAspectRatio: 1
   applicationIdentifier:
-    Android: com.android.arenax
+    Android: com.alpha.arenax
   buildNumber:
     Standalone: 0
     VisionOS: 0
@@ -269,7 +269,7 @@ PlayerSettings:
   AndroidAllowedArchitectures: -1
   AndroidSplashScreenScale: 0
   androidSplashScreen: {fileID: 0}
-  AndroidKeystoreName: C:/Users/Akash Das/Desktop/Keystore/NewKeyStore/NewKeyStore/arenax.keystore
+  AndroidKeystoreName: E:/NewKeyStore/arenax.keystore
   AndroidKeyaliasName: arenaxproject
   AndroidEnableArmv9SecurityFeatures: 0
   AndroidEnableArm64MTE: 0

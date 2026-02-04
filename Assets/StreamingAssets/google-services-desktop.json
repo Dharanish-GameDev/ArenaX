@@ -7,6 +7,43 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:982688911766:android:03d39a8d2aaca10e004db7",
+        "android_client_info": {
+          "package_name": "com.alpha.arenax"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "982688911766-672lotj417geibtdml01ta88tsfm1hia.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.alpha.arenax",
+            "certificate_hash": "88c1f2347608eacd50424f94746d8a427c69f433"
+          }
+        },
+        {
+          "client_id": "982688911766-n723nhqprrrhm7et50mblmagqk3d0vue.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCX6HBxw08RtcjFIgWh7t4X3dkhbnCGLQw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "982688911766-n723nhqprrrhm7et50mblmagqk3d0vue.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:982688911766:android:d72f76984bfbcc35004db7",
         "android_client_info": {
           "package_name": "com.android.arenax"
