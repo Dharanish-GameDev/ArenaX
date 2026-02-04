@@ -10,4 +10,9 @@ public class MenuUIManager : MonoBehaviour
         coinStorePanel.SetActive(true);
         landingPanel.SetActive(false);
     }
+    public void OpenMainMenu()
+    {
+        coinStorePanel.SetActive(false);
+        landingPanel.SetActive(true);
+    }
 }
