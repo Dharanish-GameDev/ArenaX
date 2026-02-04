@@ -958,11 +958,11 @@ PlayerSettings:
   captureStartupLogs: {}
   activeInputHandler: 0
   windowsGamepadBackendHint: 0
-  cloudProjectId: 4783fe8d-1d44-416d-92dc-c41af4508bd7
+  cloudProjectId: dd8f69d8-51d7-485d-acf6-f7773a6b0fdd
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
-  projectName: ArenaX
-  organizationId: akashdas081998
+  projectName: ArenaX (1)
+  organizationId: axivolabs
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0
   hmiLoadingImage: {fileID: 0}
