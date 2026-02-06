@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 1132ae81fcc93934e928e486d6b92ade
+guid: 3b2a3aedda0619c438373ef40f9033cb
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -8702238866923886357
-    second: Group 73_0
+      213: -3471503262920180372
+    second: game-stats (4)_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -113,13 +113,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Group 73_0
+      name: game-stats (4)_0
       rect:
         serializedVersion: 2
         x: 0
-        y: 0
-        width: 92
-        height: 114
+        y: 3
+        width: 313
+        height: 54
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -128,8 +128,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: be867626bdf6b3780800000000000000
-      internalID: -8702238866923886357
+      spriteID: c6d7809dc2eb2dfc0800000000000000
+      internalID: -3471503262920180372
       vertices: []
       indices: 
       edges: []
@@ -148,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Group 73_0: -8702238866923886357
+      game-stats (4)_0: -3471503262920180372
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
