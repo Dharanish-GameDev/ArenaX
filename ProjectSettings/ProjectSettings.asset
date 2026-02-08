@@ -938,7 +938,7 @@ PlayerSettings:
   cloudServicesEnabled:
     Purchasing: 0
     UNet: 1
-    Unity Ads: 0
+    Unity Ads: 1
   luminIcon:
     m_Name: 
     m_ModelFolderPath: 
@@ -960,11 +960,11 @@ PlayerSettings:
   captureStartupLogs: {}
   activeInputHandler: 0
   windowsGamepadBackendHint: 0
-  cloudProjectId: dd8f69d8-51d7-485d-acf6-f7773a6b0fdd
+  cloudProjectId: 8ccba972-c7f1-4d28-823e-666a715b3c03
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
-  projectName: ArenaX (1)
-  organizationId: axivolabs
+  projectName: Pick Or Perish
+  organizationId: dharanishgamedev
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0
   hmiLoadingImage: {fileID: 0}

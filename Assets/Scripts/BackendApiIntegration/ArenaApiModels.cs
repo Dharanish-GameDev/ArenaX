@@ -331,4 +331,13 @@ namespace Arena.API.Models
         public bool canEnter;
         public string message;
     }
+    
+}
+
+public enum RewardType
+{
+    coins,
+    silver,
+    gold,
+    diamond
 }

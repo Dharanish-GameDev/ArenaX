@@ -19,6 +19,7 @@ public class MainMenu : MonoBehaviour
     [SerializeField] private RawImage profileImage;
     
     
+    
     public static bool isLoadedAlready = false;
 
     private List<GameObject> screens = new List<GameObject>();

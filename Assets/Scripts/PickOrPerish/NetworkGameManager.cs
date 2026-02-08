@@ -53,16 +53,16 @@ public class NetworkGameManager : NetworkBehaviour
 
         int currentPlayers = NetworkManager.Singleton.ConnectedClientsIds.Count;
 
-        Debug.Log($"Client Connected: {obj} | Players: {currentPlayers}/{LobbyManager.Instance.MaxConnections}");
-
-        if (currentPlayers > LobbyManager.Instance.MaxConnections)
+        Debug.Log($"Client Connected: {obj} | Players: {currentPlayers}/{LobbyManager.Instance.MaxPlayers}");
+        
+        if (currentPlayers > LobbyManager.Instance.MaxPlayers)
         {
             Debug.Log("Max players exceeded! Disconnecting client.");
-
+        
             NetworkManager.Singleton.DisconnectClient(obj);
         }
-
-        if (currentPlayers == LobbyManager.Instance.MaxConnections)
+        
+        if (currentPlayers == LobbyManager.Instance.MaxPlayers)
         {
             DisableWaitingUIClientRPC();
             StartCountDown();   

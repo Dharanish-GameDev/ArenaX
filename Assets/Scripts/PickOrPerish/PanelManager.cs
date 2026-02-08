@@ -42,14 +42,15 @@ public class PanelManager : MonoBehaviour
 
     private void Awake()
     {
-        connectionPanel.SetActive(true);
-        gameplayPanel.SetActive(false);
-        startMatchButton.gameObject.SetActive(false);
-        startMatchButton.onClick.AddListener(() =>
-        {
-            startMatchButton.gameObject.SetActive(false);
-            NetworkGameManager.Instance.StartCountDown();
-        });
+        // return;
+        // connectionPanel.SetActive(true);
+        // gameplayPanel.SetActive(false);
+        // startMatchButton.gameObject.SetActive(false);
+        // startMatchButton.onClick.AddListener(() =>
+        // {
+        //     startMatchButton.gameObject.SetActive(false);
+        //     NetworkGameManager.Instance.StartCountDown();
+        // });
     }
 
     private void Start()

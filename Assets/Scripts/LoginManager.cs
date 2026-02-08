@@ -56,4 +56,14 @@ public class LoginManager : MonoBehaviour
    {
       return username;
    }
+
+   public void LoginWithGoogle()
+   {
+      UnifiedAuthManager.Instance.LoginWithGoogle();
+   }
+
+   public void LoginWithFacebook()
+   {
+      UnifiedAuthManager.Instance.LoginWithFacebook();
+   }
 }
