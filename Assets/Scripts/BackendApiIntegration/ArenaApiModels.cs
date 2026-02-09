@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 
 namespace Arena.API.Models
 {
@@ -214,9 +215,7 @@ namespace Arena.API.Models
     [Serializable]
     public class WatchAdRewardRequest
     {
-        // Use what your backend expects (adUnitId, placement, proof token, etc.)
-        public string placement;
-        public string adToken;
+        public string adId;
     }
 
     [Serializable]
@@ -275,21 +274,17 @@ namespace Arena.API.Models
     [Serializable]
     public class StoreItem
     {
+        [JsonProperty("productId")]
         public string id;
+        [JsonProperty("coins")]
+        public int quantity;
         public string name;
         public string description;
+        [JsonProperty("price")]
         public float price;
         public string type;
     }
-
-    // If your GET /store/items returns a raw array, you can deserialize with a wrapper or a custom helper.
-    // Unity JsonUtility can't parse top-level arrays directly without a wrapper.
-    [Serializable]
-    public class StoreItemsResponse
-    {
-        public List<StoreItem> items;
-    }
-
+    
     [Serializable]
     public class PurchaseRequest
     {

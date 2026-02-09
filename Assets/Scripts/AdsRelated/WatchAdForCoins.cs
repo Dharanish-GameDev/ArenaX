@@ -22,11 +22,18 @@ public class WatchAdForCoins : MonoBehaviour
     
     private void ShowAdForCoins()
     {
-        
-        
-        
         AdsManager.Instance.RewardedAd.ShowAd(() =>
         {
+            WatchAdRewardRequest request = new WatchAdRewardRequest();
+            RewardedAdService rewardedAdService = AdsManager.Instance.RewardedAd as  RewardedAdService;
+            if (rewardedAdService != null)
+            {
+                request.adId = rewardedAdService.lastShownAdId;
+            }
+            
+            string json = JsonConvert.SerializeObject(request);
+            
+            
 #if UNITY_EDITOR
             if (debug)
             {
@@ -44,7 +51,7 @@ public class WatchAdForCoins : MonoBehaviour
                 (er) =>
                 {
                     
-                });
+                },json);
         });
     }
 

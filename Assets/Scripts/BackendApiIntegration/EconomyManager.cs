@@ -1,6 +1,7 @@
 using UnityEngine;
 using System;
 using Arena.API.Models;
+using Newtonsoft.Json;
 
 public class EconomyManager : MonoBehaviour
 {
@@ -145,10 +146,79 @@ public class EconomyManager : MonoBehaviour
     }
 
     #endregion
-    
+
+    #region SERVER WALLET INTEGRATION
+
+    public void ApplyServerWallet(WalletBalanceResponse wallet)
+    {
+        if (wallet == null) return;
+
+        SetCoins(wallet.coins);
+        SetSilver(wallet.silver);
+        SetDiamonds(wallet.diamond);
+    }
+
+    public void ResetAll()
+    {
+        SetCoins(0);
+        SetSilver(0);
+        SetDiamonds(0);
+    }
+
+    /// <summary>
+    /// Fetch wallet balance from server and apply to EconomyManager
+    /// </summary>
+    public void FetchWalletBalance(Action onComplete = null)
+    {
+        ApiManager.Instance.SendRequest<WalletBalanceResponse>(
+            ApiEndPoints.Wallet.Balance,
+            RequestMethod.GET,
+            (response) =>
+            {
+                if (response != null)
+                {
+                    ApplyServerWallet(response);
+                }
+                onComplete?.Invoke();
+            },
+            (error) =>
+            {
+                Debug.LogError("Wallet Balance Error: " + error);
+                onComplete?.Invoke();
+            });
+    }
+
+    /// <summary>
+    /// Validate entry cost before gameplay
+    /// </summary>
+    public void ValidateEntry(int amount, Action<bool, string> callback)
+    {
+        ValidateEntryRequest req = new ValidateEntryRequest
+        {
+            amount = amount
+        };
+
+        string json = JsonConvert.SerializeObject(req);
+
+        ApiManager.Instance.SendRequest<ValidateEntryResponse>(
+            ApiEndPoints.Wallet.ValidateEntry,
+            RequestMethod.POST,
+            (response) =>
+            {
+                callback?.Invoke(response.canEnter, response.message);
+            },
+            (error) =>
+            {
+                Debug.LogError("Validate Entry Error: " + error);
+                callback?.Invoke(false, "Server error");
+            },
+            json);
+    }
+
+    #endregion
+
     public static bool TryParseReward(string value, out RewardType reward)
     {
         return Enum.TryParse(value, true, out reward);
     }
-
 }

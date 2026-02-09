@@ -4,30 +4,98 @@ using UnityEngine;
 using Arena.API.Models;
 using Newtonsoft.Json;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 public class StoreManager : MonoBehaviour
 {
     private static StoreManager instance;
     public static StoreManager Instance => instance;
 
-    // Separate lists for different item types
     private List<StoreItem> coinItems = new List<StoreItem>();
     private List<StoreItem> diamondItems = new List<StoreItem>();
     private List<StoreItem> silverItems = new List<StoreItem>();
     
     private bool isInitialized = false;
 
-    // Separate events for each category
-    public event Action OnCoinItemsLoaded;
-    public event Action OnDiamondItemsLoaded;
-    public event Action OnSilverItemsLoaded;
-    public event Action OnAllItemsLoaded;
-    
+    public event Action OnStoreItemsLoaded;
     public event Action<StoreItem> OnItemPurchased;
     public event Action<string> OnPurchaseFailed;
 
-    // Property to track loading status
-    private int loadedCategories = 0;
-    private const int TOTAL_CATEGORIES = 3;
+#if UNITY_EDITOR
+    [Header("Editor Simulation")]
+    [SerializeField] private bool useSimulatedData = false;
+    [TextArea(3, 10)]
+    [SerializeField] private string simulatedStoreItemsJson = @"[
+        {
+            ""id"": ""coin_1"",
+            ""name"": ""100 Coins"",
+            ""description"": ""Small coin pack"",
+            ""price"": 0.99,
+            ""type"": ""coin""
+        },
+        {
+            ""id"": ""coin_2"",
+            ""name"": ""500 Coins"",
+            ""description"": ""Medium coin pack"",
+            ""price"": 4.99,
+            ""type"": ""coin""
+        },
+        {
+            ""id"": ""coin_3"",
+            ""name"": ""1000 Coins"",
+            ""description"": ""Large coin pack"",
+            ""price"": 9.99,
+            ""type"": ""coin""
+        },
+        {
+            ""id"": ""diamond_1"",
+            ""name"": ""50 Diamonds"",
+            ""description"": ""Small diamond pack"",
+            ""price"": 1.99,
+            ""type"": ""diamond""
+        },
+        {
+            ""id"": ""diamond_2"",
+            ""name"": ""150 Diamonds"",
+            ""description"": ""Medium diamond pack"",
+            ""price"": 4.99,
+            ""type"": ""diamond""
+        },
+        {
+            ""id"": ""diamond_3"",
+            ""name"": ""500 Diamonds"",
+            ""description"": ""Large diamond pack"",
+            ""price"": 14.99,
+            ""type"": ""diamond""
+        },
+        {
+            ""id"": ""silver_1"",
+            ""name"": ""250 Silver"",
+            ""description"": ""Small silver pack"",
+            ""price"": 1.49,
+            ""type"": ""silver""
+        },
+        {
+            ""id"": ""silver_2"",
+            ""name"": ""1000 Silver"",
+            ""description"": ""Medium silver pack"",
+            ""price"": 4.49,
+            ""type"": ""silver""
+        },
+        {
+            ""id"": ""silver_3"",
+            ""name"": ""2500 Silver"",
+            ""description"": ""Large silver pack"",
+            ""price"": 9.99,
+            ""type"": ""silver""
+        }
+    ]";
+
+    [SerializeField] private bool simulatePurchaseSuccess = true;
+    [SerializeField] private float simulatedPurchaseDelay = 0.5f;
+#endif
 
     private void Awake()
     {
@@ -42,8 +110,6 @@ public class StoreManager : MonoBehaviour
         }
     }
 
-    #region Public Methods
-
     /// <summary>
     /// Initialize the store by loading available items
     /// </summary>
@@ -55,8 +121,7 @@ public class StoreManager : MonoBehaviour
             return;
         }
 
-        loadedCategories = 0;
-        LoadAllStoreItems(onComplete);
+        LoadStoreItems(onComplete);
     }
 
     /// <summary>
@@ -90,15 +155,12 @@ public class StoreManager : MonoBehaviour
     /// </summary>
     public StoreItem GetItemById(string itemId)
     {
-        // Check coin items
         var item = coinItems.Find(i => i.id == itemId);
         if (item != null) return item;
         
-        // Check diamond items
         item = diamondItems.Find(i => i.id == itemId);
         if (item != null) return item;
         
-        // Check silver items
         item = silverItems.Find(i => i.id == itemId);
         return item;
     }
@@ -115,7 +177,7 @@ public class StoreManager : MonoBehaviour
         if (type.Contains("silver", StringComparison.OrdinalIgnoreCase)) 
             return StoreCategory.Silver;
         
-        return StoreCategory.Coin; // Default
+        return StoreCategory.Coin;
     }
 
     /// <summary>
@@ -135,7 +197,15 @@ public class StoreManager : MonoBehaviour
             return;
         }
 
-        // Create purchase request
+#if UNITY_EDITOR
+        if (useSimulatedData)
+        {
+            // Simulate purchase in editor
+            StartCoroutine(SimulatePurchase(item, onComplete));
+            return;
+        }
+#endif
+
         var purchaseRequest = new PurchaseRequest
         {
             itemId = itemId,
@@ -144,7 +214,6 @@ public class StoreManager : MonoBehaviour
         
         string json = JsonConvert.SerializeObject(purchaseRequest);
 
-        // Send purchase request to server
         ApiManager.Instance.SendRequest<PurchaseResponse>(
             ApiEndPoints.Store.Purchase,
             RequestMethod.POST,
@@ -156,9 +225,6 @@ public class StoreManager : MonoBehaviour
                     {
                         Debug.Log($"Purchase successful: {response.message}");
                         OnItemPurchased?.Invoke(item);
-                        
-                        // Refresh the specific category after purchase
-                        RefreshCategory(GetCategoryFromType(item.type));
                     }
                     else
                     {
@@ -182,21 +248,47 @@ public class StoreManager : MonoBehaviour
             json);
     }
 
+#if UNITY_EDITOR
+    private System.Collections.IEnumerator SimulatePurchase(StoreItem item, Action<PurchaseResponse> onComplete)
+    {
+        Debug.Log($"<color=yellow>[SIMULATED]</color> Processing purchase for: {item.name}");
+        
+        // Simulate network delay
+        yield return new WaitForSeconds(simulatedPurchaseDelay);
+
+        if (simulatePurchaseSuccess)
+        {
+            var response = new PurchaseResponse
+            {
+                success = true,
+                message = $"Successfully purchased {item.name}!"
+            };
+            
+            Debug.Log($"<color=green>[SIMULATED]</color> Purchase successful: {item.name}");
+            OnItemPurchased?.Invoke(item);
+            onComplete?.Invoke(response);
+        }
+        else
+        {
+            var response = new PurchaseResponse
+            {
+                success = false,
+                message = "Simulated purchase failure"
+            };
+            
+            Debug.Log($"<color=red>[SIMULATED]</color> Purchase failed: {item.name}");
+            OnPurchaseFailed?.Invoke(response.message);
+            onComplete?.Invoke(response);
+        }
+    }
+#endif
+
     /// <summary>
     /// Refresh all store items from server
     /// </summary>
     public void RefreshStoreItems(Action onComplete = null)
     {
-        loadedCategories = 0;
-        LoadAllStoreItems(onComplete);
-    }
-
-    /// <summary>
-    /// Refresh specific category
-    /// </summary>
-    public void RefreshCategory(StoreCategory category, Action onComplete = null)
-    {
-        LoadCategoryItems(category, onComplete);
+        LoadStoreItems(onComplete);
     }
 
     /// <summary>
@@ -207,40 +299,196 @@ public class StoreManager : MonoBehaviour
         return isInitialized;
     }
 
-    #endregion
-
-    #region Private Methods
+    /// <summary>
+    /// Format price for display with category-specific formatting
+    /// </summary>
+    public string FormatPrice(StoreItem item)
+    {
+        var category = GetCategoryFromType(item.type);
+        
+        return category switch
+        {
+            StoreCategory.Coin => $"${item.price:F2}",
+            StoreCategory.Diamond => $"${item.price:F2}",
+            StoreCategory.Silver => $"${item.price:F2}",
+            _ => $"${item.price:F2}"
+        };
+    }
 
     /// <summary>
-    /// Load all store items from server
+    /// Load store items from server - FIXED VERSION
     /// </summary>
-    private void LoadAllStoreItems(Action onComplete = null)
+    private void LoadStoreItems(Action onComplete = null)
     {
-        // Load all items first, then categorize them
-        ApiManager.Instance.SendRequest<StoreItemsResponse>(
+#if UNITY_EDITOR
+        if (useSimulatedData)
+        {
+            // Use simulated data in editor
+            LoadSimulatedStoreItems(onComplete);
+            return;
+        }
+#endif
+
+        // Use real API - TRY BOTH METHODS
+        TryLoadStoreItems(onComplete);
+    }
+
+    /// <summary>
+    /// Try loading store items with better error handling
+    /// </summary>
+    private void TryLoadStoreItems(Action onComplete)
+    {
+        ApiManager.Instance.SendRequest(
             ApiEndPoints.Store.Items,
             RequestMethod.GET,
-            (response) =>
+            (string rawResponse) =>
             {
-                if (response != null && response.items != null)
+                Debug.Log($"Raw JSON Response: {rawResponse}");
+                
+                try
                 {
-                    CategorizeItems(response.items);
-                    isInitialized = true;
-                    Debug.Log($"Loaded {response.items.Count} store items");
-                    OnAllItemsLoaded?.Invoke();
+                    // Try to parse the response
+                    var items = JsonConvert.DeserializeObject<List<StoreItem>>(rawResponse);
+                    
+                    if (items != null && items.Count > 0)
+                    {
+                        CategorizeItems(items);
+                        isInitialized = true;
+                        Debug.Log($"Successfully loaded {items.Count} store items");
+                        OnStoreItemsLoaded?.Invoke();
+                    }
+                    else if (items != null && items.Count == 0)
+                    {
+                        Debug.LogWarning("Store items list is empty (0 items)");
+                        OnStoreItemsLoaded?.Invoke();
+                    }
+                    else
+                    {
+                        Debug.LogError("Failed to deserialize store items: null response");
+                    }
                 }
-                else
+                catch (JsonException je)
                 {
-                    Debug.LogError("Failed to load store items: Invalid response");
+                    Debug.LogError($"JSON Parse Error: {je.Message}");
+                    Debug.LogError($"Raw response was: {rawResponse}");
+                    
+                    // Try alternative parsing
+                    TryAlternativeParsing(rawResponse);
                 }
+                catch (Exception e)
+                {
+                    Debug.LogError($"Error loading store items: {e.Message}");
+                }
+                
                 onComplete?.Invoke();
             },
             (error) =>
             {
-                Debug.LogError($"Failed to load store items: {error}");
+                Debug.LogError($"Network error loading store items: {error}");
                 onComplete?.Invoke();
             });
     }
+
+    /// <summary>
+    /// Try alternative parsing methods
+    /// </summary>
+    private void TryAlternativeParsing(string rawResponse)
+    {
+        try
+        {
+            // Sometimes the response might be wrapped differently
+            // Try to see if it's a different format
+            Debug.Log("Trying alternative parsing...");
+            
+            // Remove whitespace and check first character
+            string trimmed = rawResponse.Trim();
+            
+            if (trimmed.StartsWith("["))
+            {
+                Debug.Log("Response is a JSON array, trying direct deserialization...");
+                
+                // Already tried this, maybe the StoreItem class doesn't match?
+                var items = JsonConvert.DeserializeObject<List<StoreItem>>(rawResponse);
+                if (items != null)
+                {
+                    Debug.Log($"Alternative parsing successful: {items.Count} items");
+                    CategorizeItems(items);
+                    OnStoreItemsLoaded?.Invoke();
+                    return;
+                }
+            }
+            else if (trimmed.StartsWith("{"))
+            {
+                Debug.Log("Response is a JSON object, trying wrapper...");
+                
+                // Maybe it's wrapped in an object?
+                var wrapper = JsonConvert.DeserializeObject<StoreItemsResponseWrapper>(rawResponse);
+                if (wrapper != null && wrapper.items != null)
+                {
+                    Debug.Log($"Wrapper parsing successful: {wrapper.items.Count} items");
+                    CategorizeItems(wrapper.items);
+                    OnStoreItemsLoaded?.Invoke();
+                    return;
+                }
+            }
+            
+            Debug.LogError("All parsing attempts failed");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Alternative parsing failed: {e.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Wrapper class for alternative response format
+    /// </summary>
+    [Serializable]
+    private class StoreItemsResponseWrapper
+    {
+        public List<StoreItem> items;
+        public string status;
+        public string message;
+    }
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// Load simulated store items for editor testing
+    /// </summary>
+    private void LoadSimulatedStoreItems(Action onComplete = null)
+    {
+        try
+        {
+            Debug.Log("<color=yellow>[SIMULATED]</color> Loading simulated store items...");
+            
+            // Parse the simulated JSON
+            var items = JsonConvert.DeserializeObject<List<StoreItem>>(simulatedStoreItemsJson);
+            
+            if (items != null)
+            {
+                CategorizeItems(items);
+                isInitialized = true;
+                Debug.Log($"<color=green>[SIMULATED]</color> Loaded {items.Count} store items");
+                OnStoreItemsLoaded?.Invoke();
+            }
+            else
+            {
+                Debug.LogError("<color=red>[SIMULATED]</color> Failed to parse simulated store items");
+            }
+        }
+        catch (JsonException je)
+        {
+            Debug.LogError($"<color=red>[SIMULATED]</color> JSON Error: {je.Message}");
+            Debug.LogError($"<color=red>[SIMULATED]</color> Problem JSON: {simulatedStoreItemsJson}");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"<color=red>[SIMULATED]</color> Error loading simulated store items: {e.Message}");
+        }
+        
+        onComplete?.Invoke();
+    }
+#endif
 
     /// <summary>
     /// Categorize items into Coin, Diamond, and Silver
@@ -270,58 +518,43 @@ public class StoreManager : MonoBehaviour
         }
 
         Debug.Log($"Categorized items: {coinItems.Count} coins, {diamondItems.Count} diamonds, {silverItems.Count} silver");
-        
-        // Trigger individual category events
-        OnCoinItemsLoaded?.Invoke();
-        OnDiamondItemsLoaded?.Invoke();
-        OnSilverItemsLoaded?.Invoke();
     }
 
     /// <summary>
-    /// Load specific category items
+    /// Debug method to test JSON parsing
     /// </summary>
-    private void LoadCategoryItems(StoreCategory category, Action onComplete = null)
+    public void TestJsonParsing(string testJson)
     {
-        // For now, reload all items and recategorize
-        // In a more advanced system, you might have separate endpoints for each category
-        RefreshStoreItems(onComplete);
-    }
-
-    #endregion
-
-    #region Helper Methods
-
-    /// <summary>
-    /// Format price for display with category-specific formatting
-    /// </summary>
-    public string FormatPrice(StoreItem item)
-    {
-        var category = GetCategoryFromType(item.type);
-        
-        return category switch
+        try
         {
-            StoreCategory.Coin => $"{item.price:F0} Coins",
-            StoreCategory.Diamond => $"{item.price:F0} Diamonds",
-            StoreCategory.Silver => $"{item.price:F2} Silver",
-            _ => $"{item.price:F2}"
-        };
+            Debug.Log("Testing JSON parsing...");
+            Debug.Log($"Test JSON: {testJson}");
+            
+            var items = JsonConvert.DeserializeObject<List<StoreItem>>(testJson);
+            if (items != null)
+            {
+                Debug.Log($"Test successful! Parsed {items.Count} items");
+                foreach (var item in items)
+                {
+                    Debug.Log($"Item: {item.id}, Name: {item.name}, Price: {item.price}, Type: {item.type}");
+                }
+            }
+            else
+            {
+                Debug.LogError("Test failed: items is null");
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Test failed: {e.Message}");
+        }
     }
-
-    /// <summary>
-    /// Get category display name
-    /// </summary>
-    public string GetCategoryName(StoreCategory category)
-    {
-        return category.ToString();
-    }
-
-    #endregion
 }
 
-// Enum for store categories
 public enum StoreCategory
 {
     Coin,
     Diamond,
     Silver
 }
+

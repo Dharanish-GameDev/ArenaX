@@ -12,6 +12,7 @@ public class DailyRewardsHandler : MonoBehaviour
     
     // Cache transforms to avoid repeated GetChild calls
     private Transform[][] dayRewardTransforms;
+    private const int TOTAL_DAYS = 7;
     
     #if UNITY_EDITOR
     [SerializeField] private bool debug = false;
@@ -23,15 +24,31 @@ public class DailyRewardsHandler : MonoBehaviour
     
     private void Awake()
     {
+        InitializeTransformsCache();
+    }
+    
+    private void InitializeTransformsCache()
+    {
         // Initialize cache for each day's transforms
         dayRewardTransforms = new Transform[sevenDaysRewards.Length][];
         for (int i = 0; i < sevenDaysRewards.Length; i++)
         {
-            if (sevenDaysRewards[i] != null && sevenDaysRewards[i].childCount >= 2)
+            if (sevenDaysRewards[i] != null)
             {
-                dayRewardTransforms[i] = new Transform[2];
-                dayRewardTransforms[i][0] = sevenDaysRewards[i].GetChild(0);
-                dayRewardTransforms[i][1] = sevenDaysRewards[i].GetChild(1);
+                if (sevenDaysRewards[i].childCount >= 2)
+                {
+                    dayRewardTransforms[i] = new Transform[2];
+                    dayRewardTransforms[i][0] = sevenDaysRewards[i].GetChild(0);
+                    dayRewardTransforms[i][1] = sevenDaysRewards[i].GetChild(1);
+                }
+                else
+                {
+                    Debug.LogWarning($"Day {i} reward transform doesn't have enough children (needs at least 2)");
+                }
+            }
+            else
+            {
+                Debug.LogError($"Day {i} reward transform is null!");
             }
         }
     }
@@ -41,50 +58,86 @@ public class DailyRewardsHandler : MonoBehaviour
         #if UNITY_EDITOR
         if (debug)
         {
+            Debug.Log("Debug mode: Using local JSON data");
+            
+            // First try the debug flow
             if (!string.IsNullOrEmpty(statusResponse) && !isClaimed)
             {
-                DailyRewardStatusResponse response = JsonConvert.DeserializeObject<DailyRewardStatusResponse>(statusResponse);
-                if (response != null)
+                try
                 {
-                    ApplyServerStatusResponse(response);
-                    onComplete?.Invoke();
+                    Debug.Log($"Debug Status Response JSON: {statusResponse}");
+                    DailyRewardStatusResponse response = JsonConvert.DeserializeObject<DailyRewardStatusResponse>(statusResponse);
+                    if (response != null)
+                    {
+                        Debug.Log($"Debug: Successfully parsed response. currentDay: {response.currentDay}, canClaim: {response.canClaim}");
+                        ApplyServerStatusResponse(response);
+                        onComplete?.Invoke();
+                    }
+                    else
+                    {
+                        Debug.LogError("Debug: Failed to parse statusResponse - response is null");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Debug: JSON parse error: {ex.Message}\nStack Trace: {ex.StackTrace}");
                 }
                 return;
             }
             else if (!string.IsNullOrEmpty(afterClaimStatus))
             {
-                DailyRewardStatusResponse response = JsonConvert.DeserializeObject<DailyRewardStatusResponse>(afterClaimStatus);
-                if (response != null)
+                try
                 {
-                    ApplyServerStatusResponse(response);
-                    onComplete?.Invoke();
+                    Debug.Log($"Debug After Claim JSON: {afterClaimStatus}");
+                    DailyRewardStatusResponse response = JsonConvert.DeserializeObject<DailyRewardStatusResponse>(afterClaimStatus);
+                    if (response != null)
+                    {
+                        ApplyServerStatusResponse(response);
+                        onComplete?.Invoke();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Debug: After claim JSON parse error: {ex.Message}");
                 }
             }
             return;
         }
         #endif
         
+        Debug.Log("Fetching daily rewards from server...");
         ApiManager.Instance.SendRequest<DailyRewardStatusResponse>(
             ApiEndPoints.Rewards.DailyStatus,
             RequestMethod.GET,
             (response) =>
             {
+                Debug.Log($"Server response received. Success: {response != null}");
                 if (response != null)
                 {
                     ApplyServerStatusResponse(response);
+                }
+                else
+                {
+                    Debug.LogError("Received null response from server");
                 }
                 onComplete?.Invoke();
             },
             (error) =>
             {
-                Debug.LogError($"Failed to fetch daily rewards status: {error}");
+                Debug.LogError($"Failed to fetch daily rewards: {error}");
                 onComplete?.Invoke();
             });
     }
     
     private void ApplyServerStatusResponse(DailyRewardStatusResponse response)
     {
-        if (response == null) return;
+        if (response == null) 
+        {
+            Debug.LogError("ApplyServerStatusResponse: response is null");
+            return;
+        }
+        
+        Debug.Log($"Applying server response: currentDay={response.currentDay}, canClaim={response.canClaim}, claimedDays count={response.claimedDays?.Count}");
         
         claimRewardButton.interactable = response.canClaim;
         
@@ -95,15 +148,36 @@ public class DailyRewardsHandler : MonoBehaviour
             #if UNITY_EDITOR
             if (debug)
             {
-                RewardResponse rewardResponse = JsonConvert.DeserializeObject<RewardResponse>(claimRewardResponse);
-                OnClaimDailyReward(rewardResponse);
+                try
+                {
+                    Debug.Log($"Debug Claim Response JSON: {claimRewardResponse}");
+                    RewardResponse rewardResponse = JsonConvert.DeserializeObject<RewardResponse>(claimRewardResponse);
+                    OnClaimDailyReward(rewardResponse);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Debug: Claim response JSON parse error: {ex.Message}");
+                }
                 return;
             }
             #endif
             
             ClaimDailyRewardRequest req = new ClaimDailyRewardRequest();
+            // Server uses 0-indexed days
             req.day = response.currentDay;
-            string json = JsonConvert.SerializeObject(req);
+            Debug.Log($"Claiming reward for day: {req.day}");
+            
+            string json = "";
+            try
+            {
+                json = JsonConvert.SerializeObject(req);
+                Debug.Log($"Claim request JSON: {json}");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Failed to serialize claim request: {ex.Message}");
+                return;
+            }
             
             claimRewardButton.interactable = false; // Prevent multiple clicks
             
@@ -112,6 +186,7 @@ public class DailyRewardsHandler : MonoBehaviour
                 RequestMethod.POST,
                 (rewardResponse) =>
                 {
+                    Debug.Log($"Claim response received. Success: {rewardResponse != null}");
                     OnClaimDailyReward(rewardResponse);
                 },
                 (error) =>
@@ -122,7 +197,7 @@ public class DailyRewardsHandler : MonoBehaviour
                 json);
         });
         
-        // Apply visuals with correct day indexing
+        // Apply visuals with 0-indexed days from server
         ApplyVisuals(response.currentDay, response.claimedDays, response.canClaim);
     }
     
@@ -130,18 +205,19 @@ public class DailyRewardsHandler : MonoBehaviour
     {
         if (response == null)
         {
-            Debug.LogError("Received null reward response");
+            Debug.LogError("OnClaimDailyReward: Received null reward response");
             claimRewardButton.interactable = true;
             return;
         }
         
         if (response.reward != null)
         {
-            Debug.Log($"Claiming RewardType {response.reward.type} With Amount {response.reward.amount}");
+            Debug.Log($"Successfully claimed RewardType {response.reward.type} With Amount {response.reward.amount}");
             EconomyManager.Instance.AddEconomy(response.reward.type, response.reward.amount);
             
             #if UNITY_EDITOR
             isClaimed = true;
+            Debug.Log($"Debug: isClaimed set to {isClaimed}");
             #endif
             
             // Refresh the UI after claiming
@@ -149,69 +225,151 @@ public class DailyRewardsHandler : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning($"Can't Claim Reward: {response.message}");
+            Debug.LogWarning($"Claim failed: {response.message}");
             claimRewardButton.interactable = true; // Re-enable button if claim failed
+            
+            // Still refresh to get updated status
+            FetchRewardsFromServer();
         }
     }
     
-    private void ApplyVisuals(int currentDay, List<int> alreadyClaimedDays, bool canClaim)
+    private void ApplyVisuals(int currentDay, List<int> claimedDays, bool canClaim)
     {
-        // Validate currentDay range
-        if (currentDay < 1 || currentDay > 7)
+        Debug.Log($"ApplyVisuals called: currentDay={currentDay}, canClaim={canClaim}, claimedDays count={claimedDays?.Count}");
+        
+        // Validate currentDay range (0-6 from server)
+        if (currentDay < 0 || currentDay >= TOTAL_DAYS)
         {
-            Debug.LogError($"Invalid currentDay: {currentDay}. Expected 1-7.");
+            Debug.LogError($"Invalid currentDay: {currentDay}. Expected 0-{TOTAL_DAYS - 1} from server.");
             return;
         }
         
-        for (int i = 0; i < sevenDaysRewards.Length; i++)
-        {
-            // Convert array index (0-6) to day number (1-7)
-            int dayNumber = i + 1;
-            
-            // Check if this day has been claimed
-            bool isClaimed = alreadyClaimedDays.Contains(dayNumber);
-            
-            // Skip if this is the current claimable day (it will be handled separately)
-            if (dayNumber == currentDay && canClaim && !isClaimed)
-                continue;
-                
-            // Update visuals for each day
-            if (dayRewardTransforms[i] != null && dayRewardTransforms[i].Length >= 2)
-            {
-                // Show claimed indicator or reward icon
-                dayRewardTransforms[i][0].gameObject.SetActive(isClaimed);
-                dayRewardTransforms[i][1].gameObject.SetActive(!isClaimed);
-            }
-        }
+        // Reset all days first
+        ResetAllDayVisuals();
         
-        // Handle current day specially if it can be claimed
-        if (canClaim && currentDay >= 1 && currentDay <= 7)
+        // Mark claimed days
+        if (claimedDays != null)
         {
-            int currentDayIndex = currentDay - 1; // Convert to 0-based index
-            
-            if (currentDayIndex < sevenDaysRewards.Length && 
-                dayRewardTransforms[currentDayIndex] != null && 
-                dayRewardTransforms[currentDayIndex].Length >= 2)
+            foreach (int claimedDay in claimedDays)
             {
-                // Special visual state for today's claimable reward
-                // For example: show both inactive and add a highlight effect
-                dayRewardTransforms[currentDayIndex][0].gameObject.SetActive(false);
-                dayRewardTransforms[currentDayIndex][1].gameObject.SetActive(false);
-                
-                // You might want to activate a third child for highlighting
-                if (sevenDaysRewards[currentDayIndex].childCount > 2)
+                if (claimedDay >= 0 && claimedDay < TOTAL_DAYS)
                 {
-                    sevenDaysRewards[currentDayIndex].GetChild(2).gameObject.SetActive(true);
+                    SetDayVisuals(claimedDay, true, false);
+                }
+                else
+                {
+                    Debug.LogWarning($"Invalid claimedDay in server response: {claimedDay}");
                 }
             }
         }
+        
+        // Handle current day
+        if (canClaim && !IsDayClaimed(currentDay, claimedDays))
+        {
+            // Current day can be claimed
+            SetDayVisuals(currentDay, false, true);
+        }
+        else if (canClaim && IsDayClaimed(currentDay, claimedDays))
+        {
+            Debug.LogWarning($"Day {currentDay} is marked as claimable but also in claimedDays list");
+            SetDayVisuals(currentDay, true, false);
+        }
+        else if (!canClaim && !IsDayClaimed(currentDay, claimedDays))
+        {
+            // Current day cannot be claimed yet
+            SetDayVisuals(currentDay, false, false);
+        }
     }
     
-    // Helper method to reset debug states
+    private void ResetAllDayVisuals()
+    {
+        for (int i = 0; i < sevenDaysRewards.Length; i++)
+        {
+            SetDayVisuals(i, false, false);
+        }
+    }
+    
+    private void SetDayVisuals(int dayIndex, bool isClaimed, bool isHighlighted)
+    {
+        if (dayIndex < 0 || dayIndex >= sevenDaysRewards.Length)
+        {
+            Debug.LogError($"Invalid dayIndex in SetDayVisuals: {dayIndex}");
+            return;
+        }
+        
+        if (dayRewardTransforms[dayIndex] != null && dayRewardTransforms[dayIndex].Length >= 2)
+        {
+            // Claimed indicator (child 0)
+            dayRewardTransforms[dayIndex][0].gameObject.SetActive(isClaimed);
+            
+            // Reward icon (child 1)
+            dayRewardTransforms[dayIndex][1].gameObject.SetActive(!isClaimed);
+            
+            // Highlight effect (child 2 if exists)
+            if (sevenDaysRewards[dayIndex].childCount > 2)
+            {
+                sevenDaysRewards[dayIndex].GetChild(2).gameObject.SetActive(isHighlighted);
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"Day {dayIndex} transforms cache is not properly initialized");
+        }
+    }
+    
+    private bool IsDayClaimed(int day, List<int> claimedDays)
+    {
+        return claimedDays != null && claimedDays.Contains(day);
+    }
+    
     #if UNITY_EDITOR
     public void ResetDebugState()
     {
         isClaimed = false;
+        Debug.Log("Debug state reset");
+    }
+    
+    [ContextMenu("Test Valid Example JSON")]
+    public void TestWithValidJson()
+    {
+        string exampleJson = @"{
+            ""currentDay"": 1,
+            ""claimedDays"": [0],
+            ""nextClaimTime"": ""2026-02-08T14:42:39.782Z"",
+            ""canClaim"": true
+        }";
+        
+        statusResponse = exampleJson;
+        debug = true;
+        isClaimed = false;
+        FetchRewardsFromServer();
+        Debug.Log("Test with valid JSON triggered");
+    }
+    
+    [ContextMenu("Test Already Claimed JSON")]
+    public void TestWithAlreadyClaimedJson()
+    {
+        string exampleJson = @"{
+            ""currentDay"": 1,
+            ""claimedDays"": [0, 1],
+            ""nextClaimTime"": ""2026-02-09T14:42:39.782Z"",
+            ""canClaim"": false
+        }";
+        
+        statusResponse = exampleJson;
+        debug = true;
+        isClaimed = true;
+        FetchRewardsFromServer();
+        Debug.Log("Test with already claimed JSON triggered");
+    }
+    
+    [ContextMenu("Print Debug Info")]
+    public void PrintDebugInfo()
+    {
+        Debug.Log($"Debug mode: {debug}");
+        Debug.Log($"isClaimed: {isClaimed}");
+        Debug.Log($"Status Response: {statusResponse}");
+        Debug.Log($"Claim Response: {claimRewardResponse}");
     }
     #endif
 }

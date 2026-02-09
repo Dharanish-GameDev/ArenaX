@@ -30,6 +30,21 @@ public class LoginManager : MonoBehaviour
          OnLoginEvent.Invoke();
       };
    }
+
+   private void Start()
+   {
+      UnifiedAuthManager.Instance.OnLoginSuccess += data =>
+      {
+         Debug.Log("<color=green> Login successful!! </color>");
+         TriggerLoginEvent();
+         SetUsername(data.username);
+         EconomyManager.Instance.FetchWalletBalance(() =>
+         {
+            Debug.Log("<color=green>Successfully retrieved wallet balance</color>");
+         });
+      };
+   }
+
    public void TriggerLoginEvent()
    {
       OnUserLogin?.Invoke();
@@ -65,5 +80,10 @@ public class LoginManager : MonoBehaviour
    public void LoginWithFacebook()
    {
       UnifiedAuthManager.Instance.LoginWithFacebook();
+   }
+
+   public void CopyLoginWithGoogle()
+   {
+     UnifiedAuthManager.Instance.CopyPayLoadBuffer();
    }
 }

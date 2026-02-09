@@ -37,7 +37,6 @@ public class MainMenu : MonoBehaviour
         screens.Add(coinsStorePage);
         
         
-        if(Application.isEditor) return;
         if (!isLoadedAlready)
         {
             loadingScreen.SetActive(true);
@@ -59,10 +58,22 @@ public class MainMenu : MonoBehaviour
 
     private void Start()
     {
+        LoginManager.instance.OnUserLogin += () =>
+        {
+            loginScreen?.SetActive(false);
+            landingPage?.SetActive(true);
+            
+            StoreManager.Instance.InitializeStore(() =>
+            {
+                Debug.Log("Store Initialized After Login");
+            });
+        };
+        
         if(!isLoadedAlready) return;
         SetProfileImage(LoginManager.instance.GetProfilePicture());
         SetProfileName(LoginManager.instance.GetUsername());
     }
+    
 
     public void SetProfileName(string profileName)
     {
