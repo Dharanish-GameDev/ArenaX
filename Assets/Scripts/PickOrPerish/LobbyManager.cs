@@ -31,25 +31,16 @@ public class LobbyManager : MonoBehaviour
 
     public Lobby CurrentLobby => joinedLobby;
     public bool IsHost => isHost;
+    public int MaxPlayers => maxPlayers;
 
     private float heartbeatTimer;
     private const float HEARTBEAT_INTERVAL = 15f;
-    
+
     private float lobbyPollTimer;
-    private const float LOBBY_POLL_INTERVAL = 2.0f;
-    
-    public int MaxPlayers => maxPlayers;
+    private const float LOBBY_POLL_INTERVAL = 6f;
 
-
-    
-    // public event Action<Lobby> OnLobbyUpdated;
-    // public event Action<bool> OnHostChanged;
-    // private void RaiseLobbyEvents()
-    // {
-    //     OnLobbyUpdated?.Invoke(joinedLobby);
-    //     OnHostChanged?.Invoke(isHost);
-    // }
-
+    private bool isPolling;
+    private bool isJoining;
 
     private void Awake()
     {
@@ -68,6 +59,7 @@ public class LobbyManager : MonoBehaviour
         if (isGameStarted) return;
 
         HandleHeartbeat();
+
         lobbyPollTimer -= Time.deltaTime;
         if (lobbyPollTimer <= 0f)
         {
@@ -89,7 +81,7 @@ public class LobbyManager : MonoBehaviour
         JoinLobby(roomCode);
     }
 
-    // ===================== CORE LOBBY =====================
+    // ===================== CREATE LOBBY =====================
 
     private async void CreateLobby(string roomCode)
     {
@@ -108,8 +100,8 @@ public class LobbyManager : MonoBehaviour
             hostLobby = await Lobbies.Instance.CreateLobbyAsync(roomCode, maxPlayers, options);
             joinedLobby = hostLobby;
             isHost = true;
-            //RaiseLobbyEvents();
-            Debug.Log($"[Lobby] Created Lobby: {roomCode}");
+
+            Debug.Log($"[Lobby] Created Lobby | Room: {roomCode}");
         }
         catch (Exception e)
         {
@@ -117,86 +109,78 @@ public class LobbyManager : MonoBehaviour
         }
     }
 
-    private bool isJoining = false;
+    // ===================== JOIN LOBBY BY QUERY =====================
+
     private async void JoinLobby(string roomCode)
     {
-        if(isJoining) return;
+        if (string.IsNullOrWhiteSpace(roomCode)) return;
+        if (isJoining) return;
+        isJoining = true;
+
         try
         {
-            // 🔥 Step 1: Check if already inside a lobby
-            var joined = await Lobbies.Instance.GetJoinedLobbiesAsync();
-
-            if (joined.Count > 0)
+            var options = new QueryLobbiesOptions
             {
-                Debug.Log("[Lobby] Already in a lobby — reusing session");
+                Count = 25
+            };
 
-                joinedLobby = await Lobbies.Instance.GetLobbyAsync(joined[0]);
-                isHost = joinedLobby.HostId == AuthenticationService.Instance.PlayerId;
+            var response = await Lobbies.Instance.QueryLobbiesAsync(options);
 
-                Debug.Log($"[Lobby] Reconnected Lobby: {joinedLobby.Name}");
+            Lobby match = null;
+
+            foreach (var lobby in response.Results)
+            {
+                if (lobby.Data != null &&
+                    lobby.Data.ContainsKey(ROOM_CODE_KEY) &&
+                    lobby.Data[ROOM_CODE_KEY].Value == roomCode)
+                {
+                    match = lobby;
+                    break;
+                }
+            }
+
+            if (match == null)
+            {
+                Debug.LogError("[Lobby] No lobby found with room code: " + roomCode);
                 return;
             }
 
-            // 🔥 Step 2: Search lobbies (pagination safe)
-            string continuationToken = null;
+            joinedLobby = await Lobbies.Instance.JoinLobbyByIdAsync(match.Id);
+            isHost = joinedLobby.HostId == AuthenticationService.Instance.PlayerId;
 
-            do
-            {
-                var response = await Lobbies.Instance.QueryLobbiesAsync(new QueryLobbiesOptions
-                {
-                    Count = 25,
-                    ContinuationToken = continuationToken
-                });
-
-                foreach (var lobby in response.Results)
-                {
-                    if (lobby.Data != null &&
-                        lobby.Data.ContainsKey(ROOM_CODE_KEY) &&
-                        lobby.Data[ROOM_CODE_KEY].Value == roomCode)
-                    {
-                        joinedLobby = await Lobbies.Instance.JoinLobbyByIdAsync(lobby.Id);
-                        isHost = false;
-                        //RaiseLobbyEvents();
-                        Debug.Log($"[Lobby] Joined Lobby: {roomCode}");
-                        isJoining = false;
-                        return;
-                    }
-                }
-
-                continuationToken = response.ContinuationToken;
-
-            } while (!string.IsNullOrEmpty(continuationToken));
-
-            Debug.LogError("[Lobby] No lobby found with room code: " + roomCode);
-            isJoining = false;
+            Debug.Log($"[Lobby] Joined Lobby | Room: {roomCode}");
         }
         catch (Exception e)
         {
             Debug.LogError("[Lobby] Join Failed: " + e);
+        }
+        finally
+        {
             isJoining = false;
         }
     }
 
 
-    // ===================== GAME START =====================
+    // ===================== START GAME =====================
 
     public async void StartGame()
     {
-        if (!isHost || joinedLobby == null) return;
+        if (!isHost || joinedLobby == null || isGameStarted) return;
 
         try
         {
             string relayCode = await CreateRelay();
 
-            await Lobbies.Instance.UpdateLobbyAsync(joinedLobby.Id, new UpdateLobbyOptions
-            {
-                Data = new Dictionary<string, DataObject>
+            await Lobbies.Instance.UpdateLobbyAsync(joinedLobby.Id,
+                new UpdateLobbyOptions
                 {
-                    { START_GAME_KEY, new DataObject(DataObject.VisibilityOptions.Member, relayCode) }
-                }
-            });
+                    Data = new Dictionary<string, DataObject>
+                    {
+                        { START_GAME_KEY, new DataObject(DataObject.VisibilityOptions.Member, relayCode) }
+                    }
+                });
 
-            Debug.Log("[Lobby] Game Started");
+            Debug.Log("[Lobby] Relay Code Published: " + relayCode);
         }
         catch (Exception e)
         {
@@ -210,23 +194,25 @@ public class LobbyManager : MonoBehaviour
         string joinCode = await Relay.Instance.GetJoinCodeAsync(allocation.AllocationId);
 
         transport.SetRelayServerData(new RelayServerData(allocation, "dtls"));
-
         networkConnectionHandler.StartAsHost();
-        isGameStarted = true;
 
+        isGameStarted = true;
         return joinCode;
     }
 
     private async void JoinRelay(string joinCode)
     {
+        if (isGameStarted) return;
+
         try
         {
             JoinAllocation allocation = await Relay.Instance.JoinAllocationAsync(joinCode);
 
             transport.SetRelayServerData(new RelayServerData(allocation, "dtls"));
-
             networkConnectionHandler.StartAsClient();
+
             isGameStarted = true;
+            Debug.Log("[Relay] Client Connected");
         }
         catch (Exception e)
         {
@@ -234,12 +220,11 @@ public class LobbyManager : MonoBehaviour
         }
     }
 
-    // ===================== LOBBY SYNC =====================
-    private bool isPolling;
+    // ===================== POLLING =====================
 
     private async void PollLobby()
     {
-        if (joinedLobby == null || isPolling) return;
+        if (joinedLobby == null || isPolling || isGameStarted) return;
 
         isPolling = true;
 
@@ -248,6 +233,7 @@ public class LobbyManager : MonoBehaviour
             joinedLobby = await Lobbies.Instance.GetLobbyAsync(joinedLobby.Id);
 
             if (!isHost &&
+                joinedLobby.Data != null &&
                 joinedLobby.Data.ContainsKey(START_GAME_KEY) &&
                 joinedLobby.Data[START_GAME_KEY].Value != "0")
             {
@@ -255,18 +241,24 @@ public class LobbyManager : MonoBehaviour
                 joinedLobby = null;
             }
         }
-        catch { }
+        catch (LobbyServiceException e)
+        {
+            if (e.Reason == LobbyExceptionReason.RateLimited)
+                Debug.LogWarning("[Lobby] Poll rate limited");
+            else
+                Debug.LogError("[Lobby] Poll Failed: " + e);
+        }
         finally
         {
             isPolling = false;
         }
     }
 
-
+    // ===================== HEARTBEAT =====================
 
     private async void HandleHeartbeat()
     {
-        if (hostLobby == null) return;
+        if (!isHost || hostLobby == null || isGameStarted) return;
 
         heartbeatTimer -= Time.deltaTime;
         if (heartbeatTimer <= 0f)

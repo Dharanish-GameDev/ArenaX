@@ -38,12 +38,12 @@ public class WatchAdForCoins : MonoBehaviour
             if (debug)
             {
                 RewardResponse response = JsonConvert.DeserializeObject<RewardResponse>(testRewardJson);
-                OnShownAdsResponse(response);
+                //OnShownAdsResponse(response);
                 return;
             }
 #endif
             
-            ApiManager.Instance.SendRequest<RewardResponse>(ApiEndPoints.Rewards.WatchAd, RequestMethod.POST,
+            ApiManager.Instance.SendRequest(ApiEndPoints.Rewards.WatchAd, RequestMethod.POST,
                 (response) =>
                 {
                     OnShownAdsResponse(response);
@@ -55,10 +55,15 @@ public class WatchAdForCoins : MonoBehaviour
         });
     }
 
-    private void OnShownAdsResponse(RewardResponse response)
+    private void OnShownAdsResponse(string response)
     {
-        Debug.Log("Got Reward :  " + response.reward.type + " Amount : " + response.reward.amount);
-        EconomyManager.Instance.AddEconomy(response.reward.type, response.reward.amount);
+        EconomyManager.Instance.FetchWalletBalance(()=>
+        {
+            Debug.Log("Fecthing Wallet Balance After Ad");
+        });
+        Debug.Log(response);
+        // Debug.Log("Got Reward :  " + response.reward.type + " Amount : " + response.reward.amount);
+        // EconomyManager.Instance.AddEconomy(response.reward.type, response.reward.amount);
         ShowGotCoinsDebugUI();
     }
     

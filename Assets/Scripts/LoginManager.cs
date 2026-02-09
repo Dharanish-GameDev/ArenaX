@@ -11,8 +11,6 @@ public class LoginManager : MonoBehaviour
    
    [SerializeField] private string username;
    [SerializeField] private Texture profilePicture;
-   
-
 
    private void Awake()
    {

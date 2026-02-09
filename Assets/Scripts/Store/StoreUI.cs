@@ -31,13 +31,14 @@ public class StoreUI : MonoBehaviour
         StoreManager.Instance.OnItemPurchased += OnItemPurchased;
         StoreManager.Instance.OnPurchaseFailed += OnPurchaseFailed;
 
-        StoreManager.Instance.InitializeStore();
+        // StoreManager.Instance.InitializeStore();
     }
 
     private void OnStoreItemsLoaded()
     {
         loadingPanel.SetActive(false);
         PopulateAllContainers();
+        Debug.Log("On Store Items Loaded!!!");
     }
 
     private void PopulateAllContainers()

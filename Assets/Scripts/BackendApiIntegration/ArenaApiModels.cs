@@ -84,8 +84,6 @@ namespace Arena.API.Models
         public string id;
         public string name;
         public string profileImage;
-
-        // e.g. "pending", "accepted", etc. (as per your backend)
         public string status;
     }
 
@@ -120,6 +118,13 @@ namespace Arena.API.Models
     {
         public string requestId;
         public bool accept;
+    }
+    
+    [Serializable]
+    public class BaseResponse
+    {
+        public bool success;
+        public string message;
     }
 
     // =========================
@@ -200,10 +205,18 @@ namespace Arena.API.Models
     [Serializable]
     public class DailyRewardStatusResponse
     {
-        public int currentDay;
-        public List<int> claimedDays;
-        public string nextClaimTime; // date-time string
-        public bool canClaim;
+        // Make sure property names match exactly what server sends
+        [JsonProperty("currentDay")]
+        public int currentDay { get; set; }
+    
+        [JsonProperty("claimedDays")]
+        public List<int> claimedDays { get; set; }
+    
+        [JsonProperty("canClaimToday")]
+        public bool canClaimToday { get; set; }
+    
+        [JsonProperty("nextResetInHours")]
+        public int nextResetInHours { get; set; }
     }
 
     [Serializable]
@@ -274,15 +287,12 @@ namespace Arena.API.Models
     [Serializable]
     public class StoreItem
     {
-        [JsonProperty("productId")]
         public string id;
-        [JsonProperty("coins")]
-        public int quantity;
         public string name;
         public string description;
-        [JsonProperty("price")]
         public float price;
         public string type;
+        public float quantity; // Add this field
     }
     
     [Serializable]

@@ -141,6 +141,17 @@ public class UnifiedAuthManager : MonoBehaviour
             yield return new WaitForSeconds(0.5f);
             AttemptAutoLogin();
         }
+        
+        yield return new WaitForSeconds(0.5f);
+        #if UNITY_EDITOR
+
+        if (debugMode)
+        {
+            Debug.Log("On Login Success Called From Editor!!");
+            OnLoginSuccess?.Invoke(new  UserData());
+        }
+        
+        #endif
     }
 
     #endregion
@@ -401,7 +412,10 @@ public class UnifiedAuthManager : MonoBehaviour
         currentProvider = provider;
 
         PlayerPrefs.SetString("UserData", JsonConvert.SerializeObject(currentUser));
-
+        
+        PayLoadBuffer = PayLoadBuffer + ", AccessToken : [ " + accessToken + " ] & RefreshToken : [ " + refreshToken + " ]";
+        CopyPayLoadBuffer();
+        Debug.Log(PayLoadBuffer);
         OnLoginSuccess?.Invoke(currentUser);
     }
 

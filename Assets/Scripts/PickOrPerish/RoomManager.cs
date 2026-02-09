@@ -93,6 +93,7 @@ public class RoomManager : MonoBehaviour
         #endif
 
         var request = new JoinRoomRequest { roomCode = roomCode };
+        Debug.Log("Trying to Join Room!! : " + request.roomCode);
         string json = JsonConvert.SerializeObject(request);
 
         #if UNITY_EDITOR
@@ -100,10 +101,17 @@ public class RoomManager : MonoBehaviour
             Debug.Log($"<color=cyan>[API] JoinRoom → {json}</color>");
         #endif
 
-        ApiManager.Instance.SendRequest<CreateRoomResponse>(
+        ApiManager.Instance.SendRequest(
             ApiEndPoints.Rooms.Join,
             RequestMethod.POST,
-            OnJoinSuccess,
+            (res) =>
+            {
+                Debug.Log("[Room] Join Room Success: " + res);
+                CreateRoomResponse response = new CreateRoomResponse();
+                response.roomCode = roomCode;
+                OnJoinSuccess(response);
+            },
+
             OnJoinError,
             json
         );

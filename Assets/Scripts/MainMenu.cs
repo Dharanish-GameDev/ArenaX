@@ -36,7 +36,7 @@ public class MainMenu : MonoBehaviour
         screens.Add(dailyRewardsPage);
         screens.Add(coinsStorePage);
         
-        
+        return;
         if (!isLoadedAlready)
         {
             loadingScreen.SetActive(true);
@@ -156,6 +156,15 @@ public class MainMenu : MonoBehaviour
         profilePage.gameObject.SetActive(false);
         landingPage.SetActive(false);
         coinsStorePage.SetActive(true);
+        Invoke(nameof(LoadStoreDelay),0.5f);
+    }
+
+    private void LoadStoreDelay()
+    {
+        StoreManager.Instance.InitializeStore(() =>
+        {
+            Debug.Log("Store Initialized After Opening Store");
+        });
     }
 
     public void HideCoinsStorePage()
