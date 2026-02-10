@@ -7,6 +7,7 @@ using Firebase.Auth;
 using Firebase.Extensions;
 using Google;
 using Newtonsoft.Json;
+using ParrelSync;
 
 #region Data Models
 
@@ -34,15 +35,6 @@ public class AuthResponse
     public string refreshToken;
     public bool isNewUser;
     public bool linked;
-}
-
-[Serializable]
-public class UserProfile
-{
-    public string id;
-    public string name;
-    public string email;
-    public string profileImage;
 }
 
 [Serializable]
@@ -91,10 +83,14 @@ public class UnifiedAuthManager : MonoBehaviour
     [SerializeField] private string googleWebClientId;
     [SerializeField] private bool autoLoginOnStart = true;
 
-    [Header("Editor Debug")]
-    [SerializeField] private bool debugMode = true;
-    [SerializeField] private string editorTestToken = "";
-    [SerializeField] private bool autoUseTestTokenInEditor = true;
+    [Header("Editor Testing")]
+    [SerializeField] private EditorTestMode editorTestMode = EditorTestMode.None;
+    
+    [Header("Default Editor Mode")]
+    [SerializeField] private AuthRequest defaultEditorAuthRequest;
+    
+    [Header("Parallel Sync Mode")]
+    [SerializeField] private AuthRequest parallelSyncAuthRequest;
 
     public event Action<UserData> OnLoginSuccess;
     public event Action<string> OnLoginFailed;
@@ -107,6 +103,13 @@ public class UnifiedAuthManager : MonoBehaviour
     private string refreshToken;
     private string currentProvider;
     private string deviceId;
+
+    public enum EditorTestMode
+    {
+        None,
+        DefaultEditor,
+        ParallelSync
+    }
 
     #region Unity Lifecycle
 
@@ -127,6 +130,15 @@ public class UnifiedAuthManager : MonoBehaviour
             deviceId = PlayerPrefs.GetString("DeviceId", Guid.NewGuid().ToString());
             PlayerPrefs.SetString("DeviceId", deviceId);
         }
+        
+#if UNITY_EDITOR
+        if (ClonesManager.IsClone())
+            editorTestMode = EditorTestMode.ParallelSync;
+        else
+            editorTestMode = EditorTestMode.DefaultEditor;
+#else
+    editorTestMode = EditorTestMode.None;
+#endif
     }
 
     private IEnumerator Start()
@@ -141,17 +153,6 @@ public class UnifiedAuthManager : MonoBehaviour
             yield return new WaitForSeconds(0.5f);
             AttemptAutoLogin();
         }
-        
-        yield return new WaitForSeconds(0.5f);
-        #if UNITY_EDITOR
-
-        if (debugMode)
-        {
-            Debug.Log("On Login Success Called From Editor!!");
-            OnLoginSuccess?.Invoke(new  UserData());
-        }
-        
-        #endif
     }
 
     #endregion
@@ -198,20 +199,38 @@ public class UnifiedAuthManager : MonoBehaviour
 
     private void AttemptAutoLogin()
     {
-        accessToken = PlayerPrefs.GetString("AccessToken", "");
-        refreshToken = PlayerPrefs.GetString("RefreshToken", "");
-
-        if (!string.IsNullOrEmpty(accessToken))
-        {
-            ApiManager.Instance.SetAuthToken(accessToken);
-            LoadCachedUserData();
-            return;
-        }
-
         #if UNITY_EDITOR
-        if (autoUseTestTokenInEditor && !string.IsNullOrEmpty(editorTestToken))
-            LoginWithTestToken(editorTestToken);
+        if (editorTestMode != EditorTestMode.None)
+        {
+            switch (editorTestMode)
+            {
+                case EditorTestMode.DefaultEditor:
+                    if (defaultEditorAuthRequest != null && !string.IsNullOrEmpty(defaultEditorAuthRequest.idToken))
+                    {
+                        LoginWithEditorRequest(defaultEditorAuthRequest, "Default Editor");
+                        return;
+                    }
+                    break;
+                    
+                case EditorTestMode.ParallelSync:
+                    if (parallelSyncAuthRequest != null && !string.IsNullOrEmpty(parallelSyncAuthRequest.idToken))
+                    {
+                        LoginWithEditorRequest(parallelSyncAuthRequest, "Parallel Sync");
+                        return;
+                    }
+                    break;
+            }
+        }
         #endif
+
+        // accessToken = PlayerPrefs.GetString("AccessToken", "");
+        // refreshToken = PlayerPrefs.GetString("RefreshToken", "");
+        //
+        // if (!string.IsNullOrEmpty(accessToken))
+        // {
+        //     ApiManager.Instance.SetAuthToken(accessToken);
+        //     LoadCachedUserData();
+        // }
     }
 
     private void LoadCachedUserData()
@@ -226,15 +245,53 @@ public class UnifiedAuthManager : MonoBehaviour
 
     #endregion
 
+    #region Editor Test Modes
+
+    private void LoginWithEditorRequest(AuthRequest authRequest, string modeName)
+    {
+        Debug.Log($"[EDITOR {modeName}] Using AuthRequest for authentication");
+        
+        // Clone the request to avoid modifying the serialized object
+        var request = new AuthRequest
+        {
+            idToken = authRequest.idToken,
+            deviceId = string.IsNullOrEmpty(authRequest.deviceId) ? deviceId : authRequest.deviceId,
+            platform = string.IsNullOrEmpty(authRequest.platform) ? GetPlatformString() : authRequest.platform,
+            email = authRequest.email,
+            name = authRequest.name,
+            profileImage = authRequest.profileImage
+        };
+
+        SendAuthToBackend(request, "google");
+    }
+
+    #endregion
+
     #region Login Methods
 
     public void LoginWithGoogle()
     {
         #if UNITY_EDITOR
-        if (autoUseTestTokenInEditor && !string.IsNullOrEmpty(editorTestToken))
+        if (editorTestMode != EditorTestMode.None)
         {
-            LoginWithTestToken(editorTestToken);
-            return;
+            switch (editorTestMode)
+            {
+                case EditorTestMode.DefaultEditor:
+                    if (defaultEditorAuthRequest != null && !string.IsNullOrEmpty(defaultEditorAuthRequest.idToken))
+                    {
+                        LoginWithEditorRequest(defaultEditorAuthRequest, "Default Editor");
+                        return;
+                    }
+                    break;
+                    
+                case EditorTestMode.ParallelSync:
+                    if (parallelSyncAuthRequest != null && !string.IsNullOrEmpty(parallelSyncAuthRequest.idToken))
+                    {
+                        LoginWithEditorRequest(parallelSyncAuthRequest, "Parallel Sync");
+                        return;
+                    }
+                    break;
+            }
         }
         #endif
 
@@ -244,6 +301,22 @@ public class UnifiedAuthManager : MonoBehaviour
 
     public void LoginWithFacebook()
     {
+        #if UNITY_EDITOR
+        if (editorTestMode != EditorTestMode.None)
+        {
+            // For Facebook in editor, use whichever mode is active
+            AuthRequest request = editorTestMode == EditorTestMode.DefaultEditor 
+                ? defaultEditorAuthRequest 
+                : parallelSyncAuthRequest;
+                
+            if (request != null && !string.IsNullOrEmpty(request.idToken))
+            {
+                LoginWithEditorRequest(request, editorTestMode.ToString());
+                return;
+            }
+        }
+        #endif
+
         FB.LogInWithReadPermissions(new List<string> { "public_profile", "email" }, result =>
         {
             if (!FB.IsLoggedIn)
@@ -273,7 +346,7 @@ public class UnifiedAuthManager : MonoBehaviour
 
     #endregion
 
-    #region Google Login
+    #region Google Login (Build Only)
 
     private IEnumerator GoogleLoginAndroid()
     {
@@ -289,7 +362,7 @@ public class UnifiedAuthManager : MonoBehaviour
         var user = task.Result;
         SendGoogleAuthToBackend(user.IdToken, user.Email, user.DisplayName, user.ImageUrl?.ToString());
     }
-    string PayLoadBuffer = string.Empty;
+
     private void SendGoogleAuthToBackend(string token, string email, string name, string profile)
     {
         var request = new AuthRequest
@@ -301,17 +374,9 @@ public class UnifiedAuthManager : MonoBehaviour
             name = name,
             profileImage = profile
         };
-        
-        PayLoadBuffer = $"Google Auth PayLoad - Id Token : [ {request.idToken} ], DeviceId : [ {request.deviceId} ] , Platform : [ {request.platform} ], Email : [ {request.email} ] , Name : [ {request.name} ], ProfileImage : [ {request.profileImage} ]";
-        Debug.Log(PayLoadBuffer);
+
         SendAuthToBackend(request, "google");
     }
-    
-    public void CopyPayLoadBuffer()
-    {
-        GUIUtility.systemCopyBuffer = PayLoadBuffer;
-    }
-
 
     #endregion
 
@@ -349,26 +414,7 @@ public class UnifiedAuthManager : MonoBehaviour
 
     #endregion
 
-    #region Editor Test Token
-
-    public void LoginWithTestToken(string token)
-    {
-        var request = new AuthRequest
-        {
-            idToken = token,
-            deviceId = deviceId,
-            platform = GetPlatformString(),
-            email = "editor@test.com",
-            name = "Editor",
-            profileImage = ""
-        };
-
-        SendAuthToBackend(request, "google");
-    }
-
-    #endregion
-
-    #region Backend
+    #region Backend Communication
 
     private void SendAuthToBackend(AuthRequest request, string provider)
     {
@@ -376,11 +422,12 @@ public class UnifiedAuthManager : MonoBehaviour
         {
             "google" => ApiEndPoints.Auth.Google,
             "facebook" => ApiEndPoints.Auth.Facebook,
-            // "guest" => ApiEndPoints.Auth.Guest,
+            //"guest" => ApiEndPoints.Auth.Guest,
             _ => ApiEndPoints.Auth.Google
         };
 
         string json = JsonConvert.SerializeObject(request);
+        Debug.Log($"[{provider.ToUpper()}] Sending auth request");
 
         ApiManager.Instance.SendRequest<AuthResponse>(
             endpoint,
@@ -412,16 +459,12 @@ public class UnifiedAuthManager : MonoBehaviour
         currentProvider = provider;
 
         PlayerPrefs.SetString("UserData", JsonConvert.SerializeObject(currentUser));
-        
-        PayLoadBuffer = PayLoadBuffer + ", AccessToken : [ " + accessToken + " ] & RefreshToken : [ " + refreshToken + " ]";
-        CopyPayLoadBuffer();
-        Debug.Log(PayLoadBuffer);
         OnLoginSuccess?.Invoke(currentUser);
     }
 
     private void OnBackendAuthFailed(string error, string provider)
     {
-        Debug.LogError($"{provider} auth failed → {error}");
+        Debug.LogError($"[{provider.ToUpper()}] Auth failed → {error}");
         OnLoginFailed?.Invoke(error);
     }
 
@@ -458,4 +501,77 @@ public class UnifiedAuthManager : MonoBehaviour
     public bool IsLoggedIn() => currentUser != null;
 
     #endregion
+
+    #if UNITY_EDITOR
+    
+    [ContextMenu("Test Login with Default Editor Mode")]
+    public void TestLoginWithDefaultEditor()
+    {
+        editorTestMode = EditorTestMode.DefaultEditor;
+        LoginWithGoogle();
+    }
+
+    [ContextMenu("Test Login with Parallel Sync Mode")]
+    public void TestLoginWithParallelSync()
+    {
+        editorTestMode = EditorTestMode.ParallelSync;
+        LoginWithGoogle();
+    }
+
+    [ContextMenu("Fill Default Editor Example")]
+    public void FillDefaultEditorExample()
+    {
+        defaultEditorAuthRequest = new AuthRequest
+        {
+            idToken = "test_token_123",
+            deviceId = deviceId,
+            platform = "editor",
+            email = "test@example.com",
+            name = "Test User",
+            profileImage = ""
+        };
+        
+        editorTestMode = EditorTestMode.DefaultEditor;
+        Debug.Log("Default Editor request filled");
+    }
+
+    [ContextMenu("Copy Token from Mobile to Parallel Sync")]
+    public void CopyTokenToParallelSync()
+    {
+        // This simulates copying token from mobile build logs
+        // In reality, you'd paste the token manually in Inspector
+        if (parallelSyncAuthRequest == null)
+        {
+            parallelSyncAuthRequest = new AuthRequest();
+        }
+        
+        parallelSyncAuthRequest.deviceId = deviceId;
+        parallelSyncAuthRequest.platform = "editor";
+        
+        // Token, email, name would be pasted manually
+        Debug.Log("Ready to paste mobile token into Parallel Sync fields");
+    }
+
+    [ContextMenu("Switch to Default Editor Mode")]
+    public void SwitchToDefaultEditorMode()
+    {
+        editorTestMode = EditorTestMode.DefaultEditor;
+        Debug.Log("Switched to Default Editor Mode");
+    }
+
+    [ContextMenu("Switch to Parallel Sync Mode")]
+    public void SwitchToParallelSyncMode()
+    {
+        editorTestMode = EditorTestMode.ParallelSync;
+        Debug.Log("Switched to Parallel Sync Mode");
+    }
+
+    [ContextMenu("Disable Editor Test Mode")]
+    public void DisableEditorTestMode()
+    {
+        editorTestMode = EditorTestMode.None;
+        Debug.Log("Editor Test Mode disabled");
+    }
+
+    #endif
 }

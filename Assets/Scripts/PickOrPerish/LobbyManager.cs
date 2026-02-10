@@ -25,22 +25,59 @@ public class LobbyManager : MonoBehaviour
     private const string START_GAME_KEY = "START_GAME";
     private const string ROOM_CODE_KEY = "ROOM_CODE";
 
+    private const string PLAYER_UID_KEY = "UID";
+    private const string PLAYER_NAME_KEY = "NAME";
+    private const string PLAYER_AVATAR_KEY = "AVATAR";
+
     private bool isHost;
     private bool isGameStarted;
     private int maxPlayers;
-
-    public Lobby CurrentLobby => joinedLobby;
-    public bool IsHost => isHost;
-    public int MaxPlayers => maxPlayers;
 
     private float heartbeatTimer;
     private const float HEARTBEAT_INTERVAL = 15f;
 
     private float lobbyPollTimer;
-    private const float LOBBY_POLL_INTERVAL = 6f;
+    private const float LOBBY_POLL_INTERVAL = 3f;
 
     private bool isPolling;
     private bool isJoining;
+
+    public Lobby CurrentLobby => joinedLobby;
+    public bool IsHost => isHost;
+    public int MaxPlayers => maxPlayers;
+
+    // ===================== PLAYER INFO =====================
+
+    public struct LobbyPlayerInfo
+    {
+        public string uid;
+        public string name;
+        public string avatarUrl;
+    }
+
+    public List<LobbyPlayerInfo> GetJoinedPlayers()
+    {
+        var list = new List<LobbyPlayerInfo>();
+
+        if (joinedLobby?.Players == null)
+            return list;
+
+        foreach (var player in joinedLobby.Players)
+        {
+            var data = player.Data;
+
+            list.Add(new LobbyPlayerInfo
+            {
+                uid = data != null && data.ContainsKey(PLAYER_UID_KEY) ? data[PLAYER_UID_KEY].Value : "",
+                name = data != null && data.ContainsKey(PLAYER_NAME_KEY) ? data[PLAYER_NAME_KEY].Value : "Unknown",
+                avatarUrl = data != null && data.ContainsKey(PLAYER_AVATAR_KEY) ? data[PLAYER_AVATAR_KEY].Value : ""
+            });
+        }
+
+        return list;
+    }
+
+    // ===================== UNITY =====================
 
     private void Awake()
     {
@@ -81,6 +118,32 @@ public class LobbyManager : MonoBehaviour
         JoinLobby(roomCode);
     }
 
+    // ===================== PLAYER DATA =====================
+
+    private Dictionary<string, PlayerDataObject> GetLocalPlayerData()
+    {
+        var user = UnifiedAuthManager.Instance.GetCurrentUser();
+
+        return new Dictionary<string, PlayerDataObject>
+        {
+            { PLAYER_UID_KEY, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, user.id) },
+            { PLAYER_NAME_KEY, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, user.username) },
+            { PLAYER_AVATAR_KEY, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, user.profilePictureUrl) }
+        };
+    }
+
+    private async Task UpdateMyPlayerDataAndRefresh()
+    {
+        if (joinedLobby == null) return;
+
+        await Lobbies.Instance.UpdatePlayerAsync(
+            joinedLobby.Id,
+            AuthenticationService.Instance.PlayerId,
+            new UpdatePlayerOptions { Data = GetLocalPlayerData() });
+
+        joinedLobby = await Lobbies.Instance.GetLobbyAsync(joinedLobby.Id);
+    }
+
     // ===================== CREATE LOBBY =====================
 
     private async void CreateLobby(string roomCode)
@@ -101,6 +164,8 @@ public class LobbyManager : MonoBehaviour
             joinedLobby = hostLobby;
             isHost = true;
 
+            await UpdateMyPlayerDataAndRefresh();
+
             Debug.Log($"[Lobby] Created Lobby | Room: {roomCode}");
         }
         catch (Exception e)
@@ -109,22 +174,16 @@ public class LobbyManager : MonoBehaviour
         }
     }
 
-    // ===================== JOIN LOBBY BY QUERY =====================
+    // ===================== JOIN LOBBY =====================
 
     private async void JoinLobby(string roomCode)
     {
-        if (string.IsNullOrWhiteSpace(roomCode)) return;
-        if (isJoining) return;
+        if (string.IsNullOrWhiteSpace(roomCode) || isJoining) return;
         isJoining = true;
 
         try
         {
-            var options = new QueryLobbiesOptions
-            {
-                Count = 25
-            };
-
-            var response = await Lobbies.Instance.QueryLobbiesAsync(options);
+            var response = await Lobbies.Instance.QueryLobbiesAsync(new QueryLobbiesOptions { Count = 25 });
 
             Lobby match = null;
 
@@ -148,6 +207,8 @@ public class LobbyManager : MonoBehaviour
             joinedLobby = await Lobbies.Instance.JoinLobbyByIdAsync(match.Id);
             isHost = joinedLobby.HostId == AuthenticationService.Instance.PlayerId;
 
+            await UpdateMyPlayerDataAndRefresh();
+
             Debug.Log($"[Lobby] Joined Lobby | Room: {roomCode}");
         }
         catch (Exception e)
@@ -159,7 +220,6 @@ public class LobbyManager : MonoBehaviour
             isJoining = false;
         }
     }
-
 
     // ===================== START GAME =====================
 
@@ -203,6 +263,7 @@ public class LobbyManager : MonoBehaviour
     private async void JoinRelay(string joinCode)
     {
         if (isGameStarted) return;
+        isGameStarted = true;
 
         try
         {
@@ -211,11 +272,11 @@ public class LobbyManager : MonoBehaviour
             transport.SetRelayServerData(new RelayServerData(allocation, "dtls"));
             networkConnectionHandler.StartAsClient();
 
-            isGameStarted = true;
             Debug.Log("[Relay] Client Connected");
         }
         catch (Exception e)
         {
+            isGameStarted = false;
             Debug.LogError("[Relay] Join Failed: " + e);
         }
     }
@@ -234,11 +295,11 @@ public class LobbyManager : MonoBehaviour
 
             if (!isHost &&
                 joinedLobby.Data != null &&
-                joinedLobby.Data.ContainsKey(START_GAME_KEY) &&
-                joinedLobby.Data[START_GAME_KEY].Value != "0")
+                joinedLobby.Data.TryGetValue(START_GAME_KEY, out var startData) &&
+                startData.Value != "0")
             {
-                JoinRelay(joinedLobby.Data[START_GAME_KEY].Value);
-                joinedLobby = null;
+                Debug.Log("[Lobby] Game Start Detected → Joining Relay");
+                JoinRelay(startData.Value);
             }
         }
         catch (LobbyServiceException e)

@@ -82,6 +82,6 @@ public class LoginManager : MonoBehaviour
 
    public void CopyLoginWithGoogle()
    {
-     UnifiedAuthManager.Instance.CopyPayLoadBuffer();
+     //UnifiedAuthManager.Instance.CopyPayLoadBuffer();
    }
 }
