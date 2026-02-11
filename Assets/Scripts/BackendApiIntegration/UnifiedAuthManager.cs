@@ -7,7 +7,10 @@ using Firebase.Auth;
 using Firebase.Extensions;
 using Google;
 using Newtonsoft.Json;
+#if UNITY_EDITOR
 using ParrelSync;
+#endif
+
 
 #region Data Models
 

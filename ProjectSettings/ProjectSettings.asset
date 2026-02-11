@@ -269,7 +269,7 @@ PlayerSettings:
   AndroidAllowedArchitectures: -1
   AndroidSplashScreenScale: 0
   androidSplashScreen: {fileID: 0}
-  AndroidKeystoreName: E:/NewKeyStore/arenax.keystore
+  AndroidKeystoreName: C:/Users/Akash Das/Desktop/Keystore/NewKeyStore/NewKeyStore/arenax.keystore
   AndroidKeyaliasName: arenaxproject
   AndroidEnableArmv9SecurityFeatures: 0
   AndroidEnableArm64MTE: 0

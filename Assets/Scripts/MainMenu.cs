@@ -36,7 +36,7 @@ public class MainMenu : MonoBehaviour
         screens.Add(dailyRewardsPage);
         screens.Add(coinsStorePage);
         
-        return;
+        //return;
         if (!isLoadedAlready)
         {
             loadingScreen.SetActive(true);
