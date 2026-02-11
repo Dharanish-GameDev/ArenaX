@@ -28,8 +28,6 @@ public class NetworkGameManager : NetworkBehaviour
     private Coroutine countDownCoroutine;
 
     private bool winnerFound = false;
-    
-    [SerializeField] private List<PoP_PlayerDataSO> playerDatas = new List<PoP_PlayerDataSO>();
 
     public static int defaultLives = 3;
 
@@ -279,14 +277,7 @@ public class NetworkGameManager : NetworkBehaviour
     #endregion
 
     #region DataHandlers
-
-    public PoP_PlayerDataSO GetPlayerDataForId(int playerId)
-    {
-        PoP_PlayerDataSO playerDataSO = null;
-        playerDataSO = playerDatas.FirstOrDefault(p => p.playerID == playerId);
-        return playerDataSO;
-    }
-
+    
     #endregion
 #if UNITY_EDITOR
     [Range(1, 10)]

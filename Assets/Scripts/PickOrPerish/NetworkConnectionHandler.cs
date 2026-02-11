@@ -6,6 +6,7 @@ using Unity.Netcode;
 
 public class NetworkConnectionHandler : MonoBehaviour
 {
+    private const int MaxPlayersForQuickMatch = 2; // Can be upto 10
     public event Action OnNetworkJoined;
     public void StartAsHost()
     {
@@ -17,5 +18,10 @@ public class NetworkConnectionHandler : MonoBehaviour
     {
        NetworkManager.Singleton.StartClient();
        OnNetworkJoined?.Invoke();
+    }
+
+    public void JoinQuickMatch()
+    {
+        LobbyManager.Instance.StartQuickMatch(MaxPlayersForQuickMatch);
     }
 }

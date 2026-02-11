@@ -239,11 +239,53 @@ namespace Arena.API.Models
     }
 
     [Serializable]
+    public class ClaimRewardResponse
+    {
+        public bool success;
+        public Reward reward;
+
+        public override string ToString()
+        {
+            return $"[ClaimRewardResponse] success={success}\n{reward.ToString()}";
+        }
+    }
+    
+
+    public enum RewardType
+    {
+        MATCH_WIN,
+        MATCH_LOSS,
+        DAILY_LOGIN,
+        WATCH_AD,
+        JOINING_BONUS,
+        ACHIEVEMENT
+    }
+
+
+    [Serializable]
     public class Reward
     {
-        public string type;   // coins/silver/gold/diamond/item/etc.
-        public int amount;
-        public string itemId; // optional
+        public string id;
+        public RewardType type;
+        public int coins;
+        public int silver;
+        public int gold;
+        public int diamond;
+        public bool repeatable;
+
+        public override string ToString()
+        {
+            return
+                "========== REWARD ==========\n" +
+                $"id         : {id}\n" +
+                $"type       : {type}\n" +
+                $"coins      : {coins}\n" +
+                $"silver     : {silver}\n" +
+                $"gold       : {gold}\n" +
+                $"diamond    : {diamond}\n" +
+                $"repeatable : {repeatable}\n" +
+                "============================";
+        }
     }
 
     // =========================
@@ -318,10 +360,15 @@ namespace Arena.API.Models
     [Serializable]
     public class WalletBalanceResponse
     {
+        public string id;
+
         public int coins;
         public int silver;
         public int gold;
         public int diamond;
+
+        public DateTime createdAt;
+        public DateTime updatedAt;
     }
 
     [Serializable]

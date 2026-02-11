@@ -35,8 +35,7 @@ public class MainMenu : MonoBehaviour
         screens.Add(profilePage);
         screens.Add(dailyRewardsPage);
         screens.Add(coinsStorePage);
-        
-        //return;
+
         if (!isLoadedAlready)
         {
             loadingScreen.SetActive(true);
@@ -127,13 +126,11 @@ public class MainMenu : MonoBehaviour
     public void ShowDailyRewardsPage()
     {
         // Here I can Make The Daily Rewards Request
-        dailyRewardsHandler.FetchRewardsFromServer(() =>
-        {
-            lastScreen = GetCurrentEnabledScreen();
-            landingPage.SetActive(false);
-            profilePage.SetActive(false);
-            dailyRewardsPage.SetActive(true);
-        });
+        lastScreen = GetCurrentEnabledScreen();
+        landingPage.SetActive(false);
+        profilePage.SetActive(false);
+        dailyRewardsPage.SetActive(true);
+        dailyRewardsHandler.FetchRewardsFromServer();
     }
 
     public void HideDailyRewardsPage()

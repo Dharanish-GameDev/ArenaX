@@ -81,6 +81,8 @@ public class GameManager : MonoBehaviourPunCallbacks
     [Header("UI")]
     [SerializeField] private TextMeshProUGUI statusText;
     [SerializeField] private TextMeshProUGUI winnerText;
+    [SerializeField] private TextMeshProUGUI playerOneNameText;
+    [SerializeField] private TextMeshProUGUI playerTwoNameText;
 
     [Header("Win Line")]
     [SerializeField] private RectTransform winLineImage;
@@ -260,12 +262,16 @@ public class GameManager : MonoBehaviourPunCallbacks
     {
         currentMode = GameMode.VsAI;
         BeginLocalMode();
+        playerOneNameText.text = UnifiedAuthManager.Instance.GetCurrentUser().username;
+        playerTwoNameText.text = "AI";
     }
 
     public void OnMode_PassAndPlay()
     {
         currentMode = GameMode.PassAndPlay;
         BeginLocalMode();
+        playerOneNameText.text = UnifiedAuthManager.Instance.GetCurrentUser().username;
+        playerTwoNameText.text = "PLAYER02";
     }
 
     public void OnMode_Multiplayer()

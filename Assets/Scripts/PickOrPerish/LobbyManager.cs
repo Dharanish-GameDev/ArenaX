@@ -46,6 +46,9 @@ public class LobbyManager : MonoBehaviour
     public bool IsHost => isHost;
     public int MaxPlayers => maxPlayers;
 
+    public bool IsJoinedMatchmaking => isJoinMatchmaking;
+    private bool isJoinMatchmaking = false;
+
     // ===================== PLAYER INFO =====================
 
     public struct LobbyPlayerInfo
@@ -88,7 +91,7 @@ public class LobbyManager : MonoBehaviour
         }
 
         Instance = this;
-        DontDestroyOnLoad(gameObject);
+        // DontDestroyOnLoad(gameObject);
     }
 
     private void Update()
@@ -110,13 +113,23 @@ public class LobbyManager : MonoBehaviour
     public void CreateLobbyFromRoom(string roomCode, int maxPlayers)
     {
         this.maxPlayers = maxPlayers;
+        isJoinMatchmaking = false;
         CreateLobby(roomCode);
     }
 
     public void JoinLobbyFromRoom(string roomCode)
     {
         JoinLobby(roomCode);
+        isJoinMatchmaking = false;
     }
+    
+    public void StartQuickMatch(int maxPlayers, Action callback = null)
+    {
+        this.maxPlayers = maxPlayers;
+        QuickJoinOrCreate();
+        isJoinMatchmaking = true;
+    }
+
 
     // ===================== PLAYER DATA =====================
 
@@ -220,6 +233,40 @@ public class LobbyManager : MonoBehaviour
             isJoining = false;
         }
     }
+    
+    private async void QuickJoinOrCreate()
+    {
+        if (isJoining) return;
+        isJoining = true;
+
+        try
+        {
+            joinedLobby = await Lobbies.Instance.QuickJoinLobbyAsync();
+            isHost = joinedLobby.HostId == AuthenticationService.Instance.PlayerId;
+
+            await UpdateMyPlayerDataAndRefresh();
+
+            Debug.Log("[Matchmaking] Quick Joined Lobby");
+        }
+        catch (LobbyServiceException e)
+        {
+            if (e.Reason == LobbyExceptionReason.NoOpenLobbies)
+            {
+                Debug.Log("[Matchmaking] No lobby found → Creating new lobby");
+
+                CreateLobby("MM_" + UnityEngine.Random.Range(1000, 9999));
+            }
+            else
+            {
+                Debug.LogError("[Matchmaking] Failed: " + e);
+            }
+        }
+        finally
+        {
+            isJoining = false;
+        }
+    }
+
 
     // ===================== START GAME =====================
 

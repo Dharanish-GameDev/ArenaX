@@ -61,8 +61,10 @@ public class WatchAdForCoins : MonoBehaviour
         {
             Debug.Log("Fecthing Wallet Balance After Ad");
         });
-        Debug.Log(response);
-        // Debug.Log("Got Reward :  " + response.reward.type + " Amount : " + response.reward.amount);
+
+        ClaimRewardResponse rewardresponse = JsonConvert.DeserializeObject<ClaimRewardResponse>(response);
+        
+        Debug.Log(rewardresponse.ToString());
         // EconomyManager.Instance.AddEconomy(response.reward.type, response.reward.amount);
         ShowGotCoinsDebugUI();
     }

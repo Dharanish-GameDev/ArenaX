@@ -4,13 +4,12 @@ using System.Collections.Generic;
 using UnityEngine;
 using Facebook.Unity;
 using Firebase.Auth;
-using Firebase.Extensions;
 using Google;
 using Newtonsoft.Json;
+
 #if UNITY_EDITOR
 using ParrelSync;
 #endif
-
 
 #region Data Models
 
@@ -23,12 +22,40 @@ public class AuthRequest
     public string email;
     public string name;
     public string profileImage;
+
+    public static string ToDebugString(AuthRequest r)
+    {
+        if (r == null) return "[AuthRequest] NULL";
+
+        return
+            "========== AUTH REQUEST ==========\n" +
+            $"idToken     : [ {r.idToken } ]\n" +
+            $"deviceId    : [ {r.deviceId} ]\n" +
+            $"platform    : [ {r.platform} ]\n" +
+            $"email       : [ {r.email} ]\n" +
+            $"name        : [ {r.name} ]\n" +
+            $"profileImage: [ {r.profileImage} ]\n" +
+            "==================================";
+    }
+
+    private static string Mask(string value, int visible = 6)
+    {
+        if (string.IsNullOrEmpty(value)) return "NULL";
+        if (value.Length <= visible) return value;
+
+        return value.Substring(0, visible) + "********";
+    }
 }
 
+
 [Serializable]
-public class RefreshTokenRequest
+public class BackendUser
 {
-    public string refreshToken;
+    public string id;
+    public string email;
+    public string name;
+    public string contact;
+    public string profileImage;
 }
 
 [Serializable]
@@ -38,6 +65,7 @@ public class AuthResponse
     public string refreshToken;
     public bool isNewUser;
     public bool linked;
+    public BackendUser user;
 }
 
 [Serializable]
@@ -51,21 +79,17 @@ public class UserData
     public int coins;
     public int gems;
     public string profilePictureUrl;
-    public string createdAt;
-    public string lastLoginAt;
-    public string countryCode;
-    public string language;
     public bool isGuest;
     public bool isNewUser;
 
-    public static UserData FromAuthResponse(AuthResponse response, string userId, string username, string email, string profileImage)
+    public static UserData FromAuthResponse(AuthResponse response)
     {
         return new UserData
         {
-            id = userId,
-            username = username,
-            email = email,
-            profilePictureUrl = profileImage,
+            id = response.user.id,
+            username = response.user.name,
+            email = response.user.email,
+            profilePictureUrl = response.user.profileImage,
             level = 1,
             coins = 1000,
             gems = 50,
@@ -82,16 +106,18 @@ public class UnifiedAuthManager : MonoBehaviour
 {
     public static UnifiedAuthManager Instance { get; private set; }
 
-    [Header("Configuration")]
+    [Header("Google")]
     [SerializeField] private string googleWebClientId;
+
+    [Header("Auto Login")]
     [SerializeField] private bool autoLoginOnStart = true;
 
     [Header("Editor Testing")]
     [SerializeField] private EditorTestMode editorTestMode = EditorTestMode.None;
-    
+
     [Header("Default Editor Mode")]
     [SerializeField] private AuthRequest defaultEditorAuthRequest;
-    
+
     [Header("Parallel Sync Mode")]
     [SerializeField] private AuthRequest parallelSyncAuthRequest;
 
@@ -100,12 +126,11 @@ public class UnifiedAuthManager : MonoBehaviour
     public event Action OnLogoutComplete;
 
     private FirebaseAuth firebaseAuth;
-    private FirebaseUser firebaseUser;
     private UserData currentUser;
     private string accessToken;
     private string refreshToken;
-    private string currentProvider;
     private string deviceId;
+    private string currentProvider;
 
     public enum EditorTestMode
     {
@@ -133,23 +158,22 @@ public class UnifiedAuthManager : MonoBehaviour
             deviceId = PlayerPrefs.GetString("DeviceId", Guid.NewGuid().ToString());
             PlayerPrefs.SetString("DeviceId", deviceId);
         }
-        
+
 #if UNITY_EDITOR
-        if (ClonesManager.IsClone())
-            editorTestMode = EditorTestMode.ParallelSync;
-        else
-            editorTestMode = EditorTestMode.DefaultEditor;
+        editorTestMode = ClonesManager.IsClone()
+            ? EditorTestMode.ParallelSync
+            : EditorTestMode.DefaultEditor;
 #else
-    editorTestMode = EditorTestMode.None;
+        editorTestMode = EditorTestMode.None;
 #endif
     }
 
     private IEnumerator Start()
     {
-        #if !UNITY_EDITOR
+#if !UNITY_EDITOR
         yield return InitializeFacebook();
         InitializeFirebase();
-        #endif
+#endif
 
         if (autoLoginOnStart)
         {
@@ -202,38 +226,27 @@ public class UnifiedAuthManager : MonoBehaviour
 
     private void AttemptAutoLogin()
     {
-        #if UNITY_EDITOR
+#if UNITY_EDITOR
         if (editorTestMode != EditorTestMode.None)
         {
-            switch (editorTestMode)
+            AuthRequest request = editorTestMode == EditorTestMode.DefaultEditor
+                ? defaultEditorAuthRequest
+                : parallelSyncAuthRequest;
+
+            if (request != null && !string.IsNullOrEmpty(request.idToken))
             {
-                case EditorTestMode.DefaultEditor:
-                    if (defaultEditorAuthRequest != null && !string.IsNullOrEmpty(defaultEditorAuthRequest.idToken))
-                    {
-                        LoginWithEditorRequest(defaultEditorAuthRequest, "Default Editor");
-                        return;
-                    }
-                    break;
-                    
-                case EditorTestMode.ParallelSync:
-                    if (parallelSyncAuthRequest != null && !string.IsNullOrEmpty(parallelSyncAuthRequest.idToken))
-                    {
-                        LoginWithEditorRequest(parallelSyncAuthRequest, "Parallel Sync");
-                        return;
-                    }
-                    break;
+                LoginWithEditorRequest(request);
+                return;
             }
         }
-        #endif
+#endif
 
-        // accessToken = PlayerPrefs.GetString("AccessToken", "");
-        // refreshToken = PlayerPrefs.GetString("RefreshToken", "");
-        //
-        // if (!string.IsNullOrEmpty(accessToken))
-        // {
-        //     ApiManager.Instance.SetAuthToken(accessToken);
-        //     LoadCachedUserData();
-        // }
+        accessToken = PlayerPrefs.GetString("AccessToken", "");
+        if (!string.IsNullOrEmpty(accessToken))
+        {
+            ApiManager.Instance.SetAuthToken(accessToken);
+            LoadCachedUserData();
+        }
     }
 
     private void LoadCachedUserData()
@@ -248,18 +261,15 @@ public class UnifiedAuthManager : MonoBehaviour
 
     #endregion
 
-    #region Editor Test Modes
+    #region Editor Login
 
-    private void LoginWithEditorRequest(AuthRequest authRequest, string modeName)
+    private void LoginWithEditorRequest(AuthRequest authRequest)
     {
-        Debug.Log($"[EDITOR {modeName}] Using AuthRequest for authentication");
-        
-        // Clone the request to avoid modifying the serialized object
         var request = new AuthRequest
         {
             idToken = authRequest.idToken,
             deviceId = string.IsNullOrEmpty(authRequest.deviceId) ? deviceId : authRequest.deviceId,
-            platform = string.IsNullOrEmpty(authRequest.platform) ? GetPlatformString() : authRequest.platform,
+            platform = authRequest.platform,
             email = authRequest.email,
             name = authRequest.name,
             profileImage = authRequest.profileImage
@@ -270,33 +280,24 @@ public class UnifiedAuthManager : MonoBehaviour
 
     #endregion
 
-    #region Login Methods
+    #region Public Login API
 
     public void LoginWithGoogle()
     {
-        #if UNITY_EDITOR
+#if UNITY_EDITOR
         if (editorTestMode != EditorTestMode.None)
         {
-            switch (editorTestMode)
+            AuthRequest request = editorTestMode == EditorTestMode.DefaultEditor
+                ? defaultEditorAuthRequest
+                : parallelSyncAuthRequest;
+
+            if (request != null && !string.IsNullOrEmpty(request.idToken))
             {
-                case EditorTestMode.DefaultEditor:
-                    if (defaultEditorAuthRequest != null && !string.IsNullOrEmpty(defaultEditorAuthRequest.idToken))
-                    {
-                        LoginWithEditorRequest(defaultEditorAuthRequest, "Default Editor");
-                        return;
-                    }
-                    break;
-                    
-                case EditorTestMode.ParallelSync:
-                    if (parallelSyncAuthRequest != null && !string.IsNullOrEmpty(parallelSyncAuthRequest.idToken))
-                    {
-                        LoginWithEditorRequest(parallelSyncAuthRequest, "Parallel Sync");
-                        return;
-                    }
-                    break;
+                LoginWithEditorRequest(request);
+                return;
             }
         }
-        #endif
+#endif
 
         InitializeGoogle();
         StartCoroutine(GoogleLoginAndroid());
@@ -304,22 +305,6 @@ public class UnifiedAuthManager : MonoBehaviour
 
     public void LoginWithFacebook()
     {
-        #if UNITY_EDITOR
-        if (editorTestMode != EditorTestMode.None)
-        {
-            // For Facebook in editor, use whichever mode is active
-            AuthRequest request = editorTestMode == EditorTestMode.DefaultEditor 
-                ? defaultEditorAuthRequest 
-                : parallelSyncAuthRequest;
-                
-            if (request != null && !string.IsNullOrEmpty(request.idToken))
-            {
-                LoginWithEditorRequest(request, editorTestMode.ToString());
-                return;
-            }
-        }
-        #endif
-
         FB.LogInWithReadPermissions(new List<string> { "public_profile", "email" }, result =>
         {
             if (!FB.IsLoggedIn)
@@ -332,24 +317,9 @@ public class UnifiedAuthManager : MonoBehaviour
         });
     }
 
-    public void LoginAsGuest()
-    {
-        var request = new AuthRequest
-        {
-            idToken = "guest",
-            deviceId = deviceId,
-            platform = GetPlatformString(),
-            email = "",
-            name = "Guest",
-            profileImage = ""
-        };
-
-        SendAuthToBackend(request, "guest");
-    }
-
     #endregion
 
-    #region Google Login (Build Only)
+    #region Google Login
 
     private IEnumerator GoogleLoginAndroid()
     {
@@ -363,19 +333,15 @@ public class UnifiedAuthManager : MonoBehaviour
         }
 
         var user = task.Result;
-        SendGoogleAuthToBackend(user.IdToken, user.Email, user.DisplayName, user.ImageUrl?.ToString());
-    }
 
-    private void SendGoogleAuthToBackend(string token, string email, string name, string profile)
-    {
         var request = new AuthRequest
         {
-            idToken = token,
+            idToken = user.IdToken,
             deviceId = deviceId,
             platform = GetPlatformString(),
-            email = email,
-            name = name,
-            profileImage = profile
+            email = user.Email,
+            name = user.DisplayName,
+            profileImage = user.ImageUrl?.ToString()
         };
 
         SendAuthToBackend(request, "google");
@@ -383,7 +349,7 @@ public class UnifiedAuthManager : MonoBehaviour
 
     #endregion
 
-    #region Facebook Sync
+    #region Facebook Login
 
     private void SyncFacebookWithBackend()
     {
@@ -417,7 +383,7 @@ public class UnifiedAuthManager : MonoBehaviour
 
     #endregion
 
-    #region Backend Communication
+    #region Backend
 
     private void SendAuthToBackend(AuthRequest request, string provider)
     {
@@ -425,23 +391,24 @@ public class UnifiedAuthManager : MonoBehaviour
         {
             "google" => ApiEndPoints.Auth.Google,
             "facebook" => ApiEndPoints.Auth.Facebook,
-            //"guest" => ApiEndPoints.Auth.Guest,
             _ => ApiEndPoints.Auth.Google
         };
-
-        string json = JsonConvert.SerializeObject(request);
-        Debug.Log($"[{provider.ToUpper()}] Sending auth request");
 
         ApiManager.Instance.SendRequest<AuthResponse>(
             endpoint,
             RequestMethod.POST,
-            res => OnBackendAuthSuccess(res, provider, request.name, request.profileImage),
+            res =>
+            {
+                string buffer = AuthRequest.ToDebugString(request);
+                GUIUtility.systemCopyBuffer = buffer;
+                OnBackendAuthSuccess(res, provider);
+            },
             err => OnBackendAuthFailed(err, provider),
-            json
+            JsonConvert.SerializeObject(request)
         );
     }
 
-    private void OnBackendAuthSuccess(AuthResponse response, string provider, string name, string photo)
+    private void OnBackendAuthSuccess(AuthResponse response, string provider)
     {
         accessToken = response.accessToken;
         refreshToken = response.refreshToken;
@@ -451,23 +418,19 @@ public class UnifiedAuthManager : MonoBehaviour
 
         ApiManager.Instance.SetAuthToken(accessToken);
 
-        currentUser = UserData.FromAuthResponse(
-            response,
-            $"{provider}_{Guid.NewGuid()}",
-            name,
-            name,
-            photo
-        );
-
+        currentUser = UserData.FromAuthResponse(response);
         currentProvider = provider;
 
         PlayerPrefs.SetString("UserData", JsonConvert.SerializeObject(currentUser));
+
+        Debug.Log($"[AUTH] Login Success → UID: {currentUser.id}");
+        
         OnLoginSuccess?.Invoke(currentUser);
     }
 
     private void OnBackendAuthFailed(string error, string provider)
     {
-        Debug.LogError($"[{provider.ToUpper()}] Auth failed → {error}");
+        Debug.LogError($"[{provider.ToUpper()}] Auth Failed → {error}");
         OnLoginFailed?.Invoke(error);
     }
 
@@ -477,15 +440,15 @@ public class UnifiedAuthManager : MonoBehaviour
 
     private string GetPlatformString()
     {
-        #if UNITY_ANDROID
-        return "android";
-        #elif UNITY_IOS
-        return "ios";
-        #elif UNITY_EDITOR
-        return "editor";
-        #else
-        return "other";
-        #endif
+#if UNITY_ANDROID
+        return "ANDROID";
+#elif UNITY_IOS
+        return "IOS";
+#elif UNITY_EDITOR
+        return "EDITOR";
+#else
+        return "OTHER";
+#endif
     }
 
     public void Logout()
@@ -495,6 +458,7 @@ public class UnifiedAuthManager : MonoBehaviour
         PlayerPrefs.DeleteKey("UserData");
 
         ApiManager.Instance.ClearAuthToken();
+
         currentUser = null;
 
         OnLogoutComplete?.Invoke();
@@ -504,77 +468,4 @@ public class UnifiedAuthManager : MonoBehaviour
     public bool IsLoggedIn() => currentUser != null;
 
     #endregion
-
-    #if UNITY_EDITOR
-    
-    [ContextMenu("Test Login with Default Editor Mode")]
-    public void TestLoginWithDefaultEditor()
-    {
-        editorTestMode = EditorTestMode.DefaultEditor;
-        LoginWithGoogle();
-    }
-
-    [ContextMenu("Test Login with Parallel Sync Mode")]
-    public void TestLoginWithParallelSync()
-    {
-        editorTestMode = EditorTestMode.ParallelSync;
-        LoginWithGoogle();
-    }
-
-    [ContextMenu("Fill Default Editor Example")]
-    public void FillDefaultEditorExample()
-    {
-        defaultEditorAuthRequest = new AuthRequest
-        {
-            idToken = "test_token_123",
-            deviceId = deviceId,
-            platform = "editor",
-            email = "test@example.com",
-            name = "Test User",
-            profileImage = ""
-        };
-        
-        editorTestMode = EditorTestMode.DefaultEditor;
-        Debug.Log("Default Editor request filled");
-    }
-
-    [ContextMenu("Copy Token from Mobile to Parallel Sync")]
-    public void CopyTokenToParallelSync()
-    {
-        // This simulates copying token from mobile build logs
-        // In reality, you'd paste the token manually in Inspector
-        if (parallelSyncAuthRequest == null)
-        {
-            parallelSyncAuthRequest = new AuthRequest();
-        }
-        
-        parallelSyncAuthRequest.deviceId = deviceId;
-        parallelSyncAuthRequest.platform = "editor";
-        
-        // Token, email, name would be pasted manually
-        Debug.Log("Ready to paste mobile token into Parallel Sync fields");
-    }
-
-    [ContextMenu("Switch to Default Editor Mode")]
-    public void SwitchToDefaultEditorMode()
-    {
-        editorTestMode = EditorTestMode.DefaultEditor;
-        Debug.Log("Switched to Default Editor Mode");
-    }
-
-    [ContextMenu("Switch to Parallel Sync Mode")]
-    public void SwitchToParallelSyncMode()
-    {
-        editorTestMode = EditorTestMode.ParallelSync;
-        Debug.Log("Switched to Parallel Sync Mode");
-    }
-
-    [ContextMenu("Disable Editor Test Mode")]
-    public void DisableEditorTestMode()
-    {
-        editorTestMode = EditorTestMode.None;
-        Debug.Log("Editor Test Mode disabled");
-    }
-
-    #endif
 }

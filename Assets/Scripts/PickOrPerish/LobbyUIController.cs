@@ -38,7 +38,12 @@ public class LobbyUIController : MonoBehaviour
         roomCodeText.text = lobby.Name;
         playerCountText.text = $"{lobby.Players.Count} / {lobby.MaxPlayers}";
 
-        startGameButton.gameObject.SetActive(manager.IsHost);
+        startGameButton.gameObject.SetActive(manager.IsHost && !manager.IsJoinedMatchmaking);
+        if (lobby.Players.Count == lobby.MaxPlayers && manager.IsHost && manager.IsJoinedMatchmaking)
+        {
+            startGameButton.onClick.Invoke();
+            startGameButton.onClick.RemoveAllListeners();
+        }
         startGameButton.interactable = lobby.Players.Count >= 2;
 
         // Always refresh slots (avatars arrive async)

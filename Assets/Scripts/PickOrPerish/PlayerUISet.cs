@@ -41,17 +41,26 @@ public class PlayerUISet : MonoBehaviour
       if (_networkPlayer != null)
       {
           int id = networkPlayer.GetPlayerID();
-          PoP_PlayerDataSO playerDataSO = NetworkGameManager.Instance.GetPlayerDataForId(id);
-          if (playerDataSO != null)
+          List<LobbyManager.LobbyPlayerInfo> playersList = LobbyManager.Instance.GetJoinedPlayers();
+          LobbyManager.LobbyPlayerInfo playerInfo = new LobbyManager.LobbyPlayerInfo();
+          if (playersList != null && playersList.Count >= id)
           {
-              string temp = playerDataSO.playerName;
-              name = temp;
-              if(playerNameText != null)
-                  playerNameText.SetText(temp);
-              
-              playerIconImage.sprite = playerDataSO.playerIcon;
-              coinsCountText.SetText(playerDataSO.coinsValue.ToString());
+              playerInfo = playersList[id];
           }
+
+          string temp = playerInfo.name;
+          name = temp;
+          if(playerNameText != null)
+              playerNameText.SetText(temp);
+          ImageLoader.Load(playerInfo.avatarUrl,playerIconImage);
+         // playerIconImage.sprite = playerDataSO.playerIcon;
+          //coinsCountText.SetText(playerDataSO.coinsValue.ToString());
+
+          // PoP_PlayerDataSO playerDataSO = NetworkGameManager.Instance.GetPlayerDataForId(id);
+          // if (playerDataSO != null)
+          // {
+
+          // }
           
           if (scoreText != null)
           {
