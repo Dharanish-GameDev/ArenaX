@@ -1,0 +1,63 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &6214060403788556538
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6607450504892912498}
+  - component: {fileID: 5164175552605831866}
+  m_Layer: 0
+  m_Name: UnifiedAuthManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6607450504892912498
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6214060403788556538}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5164175552605831866
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6214060403788556538}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de05c79e743d85841a775d32acbe9c1e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UnifiedAuthManager
+  googleWebClientId: 982688911766-n723nhqprrrhm7et50mblmagqk3d0vue.apps.googleusercontent.com
+  autoLoginOnStart: 0
+  editorTestMode: 0
+  defaultEditorAuthRequest:
+    idToken: eyJhbGciOiJSUzI1NiIsImtpZCI6ImMyN2JhNDBiMDk1MjlhZDRmMTY4MjJjZTgzMTY3YzFiYzM5MTAxMjIiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiI5ODI2ODg5MTE3NjYtNjcybG90ajQxN2dlaWJ0ZG1sMDF0YTg4dHNmbTFoaWEuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJhdWQiOiI5ODI2ODg5MTE3NjYtbjcyM25ocXBycnJobTdldDUwbWJsbWFncWszZDB2dWUuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJzdWIiOiIxMTAxNjMyNjMwODg1MzExNzg5NjgiLCJlbWFpbCI6ImRoYXJhbmlzaC5rbS4yMDIydWcwNjIyOUBnbWFpbC5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwibmFtZSI6IkRoYXJhbmlzaCBLIE0iLCJwaWN0dXJlIjoiaHR0cHM6Ly9saDMuZ29vZ2xldXNlcmNvbnRlbnQuY29tL2EvQUNnOG9jSXF2OXFMX1FfWllYYkZkM0xoWVV5T0drdjhIUVZCWGVVTEVQX09SMlppRGFxWDdVcz1zOTYtYyIsImdpdmVuX25hbWUiOiJEaGFyYW5pc2giLCJmYW1pbHlfbmFtZSI6IksgTSIsImlhdCI6MTc3MDY2NjE2OCwiZXhwIjoxNzcwNjY5NzY4fQ.SJMLn9zkcDcHKZls4u8DFR57fnz-zplDMW6YvNbxXIZU8alQXbL5QGDB-zODko4T-I_g-XuY3RxJ1q1cmu1Lu6k7zbwV_SljDzZZdIZDXO11R618QzXazHdMYR6S_0WoIs7YYUczYb35GjC4mR3ZtKeE14jK8uLL4r3sL7clLjN-fZ4peLNh5CP8Duc-5S_c40hjs0gWQjrS7Euwwzlm1vEFOM-PUV8Y8ME11dJ8O14juMUP_oLo38TFy2jpvsAXdevOZUECbGw0if5jA59VoJxkdQwDmeSCfSHsFqCZnFe7IUQpEocbswelbKyTR0nWChygzV2Tb6vOdhIvlnkYPw
+    deviceId: 882f4c399e0ecd69f90a80cc3c7e598a
+    platform: ANDROID
+    email: dharanish.km.2022ug06229@gmail.com
+    name: Dharanish
+    profileImage: https://lh3.googleusercontent.com/a/ACg8ocLpbG3B2OFK2-Mhn4SEqtcXTq-FfPUWMBVRtiLuepsU5s2PiZHi=s96-c
+  parallelSyncAuthRequest:
+    idToken: eyJhbGciOiJSUzI1NiIsImtpZCI6ImMyN2JhNDBiMDk1MjlhZDRmMTY4MjJjZTgzMTY3YzFiYzM5MTAxMjIiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiI5ODI2ODg5MTE3NjYtNjcybG90ajQxN2dlaWJ0ZG1sMDF0YTg4dHNmbTFoaWEuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJhdWQiOiI5ODI2ODg5MTE3NjYtbjcyM25ocXBycnJobTdldDUwbWJsbWFncWszZDB2dWUuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJzdWIiOiIxMDg0MzcwOTk3MDU5MTQxMjk3ODgiLCJlbWFpbCI6ImRoYXJhbmlzaG11dGh1NDYxQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiRGhhcmFuaXNoIEsgTSIsInBpY3R1cmUiOiJodHRwczovL2xoMy5nb29nbGV1c2VyY29udGVudC5jb20vYS9BQ2c4b2NLZHg3WUQxZG5NZzN5RktXdl9wZUFzeWVMaFpRSlhHTEk3cjlwM1FneXh6dXJYdXpnPXM5Ni1jIiwiZ2l2ZW5fbmFtZSI6IkRoYXJhbmlzaCIsImZhbWlseV9uYW1lIjoiSyBNIiwiaWF0IjoxNzcwNjU2MDk5LCJleHAiOjE3NzA2NTk2OTl9.p7OUNMNMYl6rvw0InvHHm9j9gpTvJP5zWbe5F0XWjCTLhgYGsxKBPmT_bym2MD3L3-OnIcYl1a8eJ9IzNX4D0uQXH3JRLYsMtG1vTeBtaJlM5oSmS0KxczcTE6G1moQ4dYJXXEZjqy0SZDlRicVsF5C-zNi8pK-LwzGwE1nKi_czJS2SaiQFzvXG83LjgMY-UQAkdIxsq2r8UyNvhO2GW1Yc2BirBkasIgv_xcH8Wy6RRT9-bWis9ZVSGaye-7uE_dpx925hVudPe74hnxAFdGar2p_1wlfG-RespQWEH8oqQUwV7wofGnxg9fpDoKc1WG9dQ_69rAuUVzM-0-hc9g
+    deviceId: 882f4c399e0ecd69f90a80cc3c7e598a
+    platform: ANDROID
+    email: dharanishmuthu461@gmail.com
+    name: Aakash
+    profileImage: https://lh3.googleusercontent.com/a/ACg8ocKdx7YD1dnMg3yFKWv_peAsyeLhZQJXGLI7r9p3QgyxzurXuzg=s96-c

@@ -138,10 +138,30 @@ public class UnifiedAuthManager : MonoBehaviour
         DefaultEditor,
         ParallelSync
     }
+    private const string PROP_NAME = "NAME";
+
+    private void SetPhotonPlayerIdentity(string username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+            username = "Player";
+
+        Photon.Pun.PhotonNetwork.NickName = username;
+
+        if (Photon.Pun.PhotonNetwork.LocalPlayer != null)
+        {
+            var props = new ExitGames.Client.Photon.Hashtable();
+            props[PROP_NAME] = username;
+            Photon.Pun.PhotonNetwork.LocalPlayer.SetCustomProperties(props);
+        }
+    }
+
 
     #region Unity Lifecycle
 
+
+
     private void Awake()
+
     {
         if (Instance != null)
         {
@@ -419,6 +439,9 @@ public class UnifiedAuthManager : MonoBehaviour
         ApiManager.Instance.SetAuthToken(accessToken);
 
         currentUser = UserData.FromAuthResponse(response);
+        // after currentUser = UserData.FromAuthResponse(response);
+        SetPhotonPlayerIdentity(currentUser.username);
+
         currentProvider = provider;
 
         PlayerPrefs.SetString("UserData", JsonConvert.SerializeObject(currentUser));
@@ -453,16 +476,60 @@ public class UnifiedAuthManager : MonoBehaviour
 
     public void Logout()
     {
+        // 0) Turn off auto-login for this session if you want
+        // (Optional) PlayerPrefs.SetInt("ManualLogout", 1);
+
+        // 1) Provider sign-out (IMPORTANT)
+        try
+        {
+            // Google Sign-In: clears cached account so user must choose again
+            GoogleSignIn.DefaultInstance.SignOut();
+            GoogleSignIn.DefaultInstance.Disconnect();
+        }
+        catch (Exception e)
+        {
+            Debug.Log($"[AUTH] Google signout skipped/failed: {e.Message}");
+        }
+
+        try
+        {
+            // Facebook
+            if (FB.IsInitialized && FB.IsLoggedIn)
+                FB.LogOut();
+        }
+        catch (Exception e)
+        {
+            Debug.Log($"[AUTH] Facebook logout skipped/failed: {e.Message}");
+        }
+
+        try
+        {
+            // Firebase (even if you didn't use it directly here, safe)
+            if (firebaseAuth == null) firebaseAuth = FirebaseAuth.DefaultInstance;
+            firebaseAuth.SignOut();
+        }
+        catch (Exception e)
+        {
+            Debug.Log($"[AUTH] Firebase signout skipped/failed: {e.Message}");
+        }
+
+        // 2) Clear backend session tokens stored locally
         PlayerPrefs.DeleteKey("AccessToken");
         PlayerPrefs.DeleteKey("RefreshToken");
         PlayerPrefs.DeleteKey("UserData");
+        PlayerPrefs.Save();
 
+        // 3) Clear API auth header / cached user
         ApiManager.Instance.ClearAuthToken();
-
+        accessToken = null;
+        refreshToken = null;
         currentUser = null;
+        currentProvider = null;
 
+        // 4) Notify UI
         OnLogoutComplete?.Invoke();
     }
+
 
     public UserData GetCurrentUser() => currentUser;
     public bool IsLoggedIn() => currentUser != null;

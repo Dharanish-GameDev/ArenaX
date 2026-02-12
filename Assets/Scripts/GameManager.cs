@@ -127,6 +127,64 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     private int CellKey(int r, int c) => (r * 1000) + c;
 
+    private const string PROP_NAME = "NAME";
+
+    private void EnsureLocalNameIsSynced()
+    {
+        // 1) Always set NickName (Photon syncs this automatically)
+        string myName = UnifiedAuthManager.Instance != null
+            && UnifiedAuthManager.Instance.GetCurrentUser() != null
+            && !string.IsNullOrWhiteSpace(UnifiedAuthManager.Instance.GetCurrentUser().username)
+                ? UnifiedAuthManager.Instance.GetCurrentUser().username
+                : $"Player {PhotonNetwork.LocalPlayer?.ActorNumber ?? 0}";
+
+        PhotonNetwork.NickName = myName;
+
+        // 2) Also set a custom player property (extra safety if NickName is empty sometimes)
+        if (PhotonNetwork.LocalPlayer != null)
+        {
+            var props = new Hashtable();
+            props[PROP_NAME] = myName;
+            PhotonNetwork.LocalPlayer.SetCustomProperties(props);
+        }
+    }
+
+    
+
+    private string GetPlayerDisplayName(Photon.Realtime.Player p)
+    {
+        if (p == null) return "PLAYER";
+
+        if (p.CustomProperties != null &&
+            p.CustomProperties.TryGetValue(PROP_NAME, out object v) &&
+            v is string s && !string.IsNullOrWhiteSpace(s))
+            return s;
+
+        if (!string.IsNullOrWhiteSpace(p.NickName))
+            return p.NickName;
+
+        return $"Player {p.ActorNumber}";
+    }
+
+    private void UpdateMultiplayerNamesUI()
+    {
+        if (playerOneNameText == null || playerTwoNameText == null) return;
+        if (!PhotonNetwork.InRoom) return;
+
+        // ✅ stable ordering: Master always shown as Player1
+        var master = PhotonNetwork.MasterClient;
+
+        Photon.Realtime.Player other = PhotonNetwork.PlayerList
+            .FirstOrDefault(p => p != null && master != null && p.ActorNumber != master.ActorNumber);
+
+        playerOneNameText.text = GetPlayerDisplayName(master);
+        playerTwoNameText.text = GetPlayerDisplayName(other);
+    }
+
+
+   
+
+
     public void RegisterPiece(int r, int c, Connect4Piece piece)
     {
         if (piece == null) return;
@@ -204,6 +262,9 @@ public class GameManager : MonoBehaviourPunCallbacks
             {
                 EnsureRoomPropertiesExist();
                 MasterUpdateReadyAndInitTurn();
+                EnsureLocalNameIsSynced();
+                UpdateMultiplayerNamesUI();
+
             }
 
             ReadTurnFromRoom();
@@ -398,6 +459,12 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         localClickLock = true;
         photonView.RPC(nameof(RPC_RequestMove), RpcTarget.MasterClient, column, PhotonNetwork.LocalPlayer.ActorNumber);
+    }
+    public override void OnPlayerPropertiesUpdate(Photon.Realtime.Player targetPlayer, Hashtable changedProps)
+    {
+        // If name changes / arrives late, refresh UI
+        if (changedProps != null && changedProps.ContainsKey(PROP_NAME))
+            UpdateMultiplayerNamesUI();
     }
 
     private IEnumerator LocalMakeMoveRoutine(int column, int runToken)
@@ -1453,6 +1520,9 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinedRoom()
     {
+        EnsureLocalNameIsSynced();
+        UpdateMultiplayerNamesUI();
+
         if (currentMode != GameMode.Multiplayer) return;
 
         if (PhotonNetwork.IsMasterClient)
@@ -1473,6 +1543,8 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     public override void OnPlayerEnteredRoom(Photon.Realtime.Player newPlayer)
     {
+        UpdateMultiplayerNamesUI();
+
         if (currentMode != GameMode.Multiplayer) return;
 
         if (PhotonNetwork.IsMasterClient)
@@ -1483,6 +1555,8 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     public override void OnPlayerLeftRoom(Photon.Realtime.Player otherPlayer)
     {
+        UpdateMultiplayerNamesUI();
+
         if (currentMode != GameMode.Multiplayer) return;
 
         if (PhotonNetwork.IsMasterClient)
@@ -1503,6 +1577,8 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     public override void OnMasterClientSwitched(Photon.Realtime.Player newMasterClient)
     {
+        UpdateMultiplayerNamesUI();
+
         if (currentMode != GameMode.Multiplayer) return;
 
         if (PhotonNetwork.IsMasterClient)
