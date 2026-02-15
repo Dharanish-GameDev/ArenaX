@@ -11,10 +11,11 @@ public static class ApiEndPoints
 
     public static class Friends
     {
-        public const string FacebookFriends = "/friends/facebook";
         public const string SendRequest = "/friends/request";
         public const string RespondRequest = "/friends/respond";
         public const string List = "/friends/list";
+        public const string IncomingRequest = "/friends/incoming";
+        public const string Remove = "/friends/remove";
     }
 
     public static class Games
@@ -57,5 +58,12 @@ public static class ApiEndPoints
     {
         public const string Balance = "/wallet/balance";
         public const string ValidateEntry = "/wallet/validate-entry";
+    }
+
+    public static class User
+    {
+        public const string GetUserProfile = "/user/profile";
+        public const string PutUserProfile = "/user/profile";
+        public const string GetUserList = "/user/list";
     }
 }

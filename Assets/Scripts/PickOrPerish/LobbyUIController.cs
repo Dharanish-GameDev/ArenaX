@@ -57,7 +57,7 @@ public class LobbyUIController : MonoBehaviour
         // Host = First player (Unity lobby owner always index 0)
         var host = players[0];
         hostSlot.gameObject.SetActive(true);
-        hostSlot.Set(host.name, host.avatarUrl);
+        hostSlot.Set(host.name, host.avatarIndex);
 
         int slotIndex = 0;
 
@@ -66,7 +66,7 @@ public class LobbyUIController : MonoBehaviour
             var p = players[i];
 
             slots[slotIndex].gameObject.SetActive(true);
-            slots[slotIndex].Set(p.name, p.avatarUrl);
+            slots[slotIndex].Set(p.name, p.avatarIndex);
 
             slotIndex++;
         }

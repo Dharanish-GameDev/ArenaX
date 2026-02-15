@@ -1,4 +1,5 @@
 using System;
+using Arena.API.Models;
 using UnityEngine;
 using UnityEngine.Events;
 
@@ -10,7 +11,7 @@ public class LoginManager : MonoBehaviour
    public event Action OnUserLogin;
    
    [SerializeField] private string username;
-   [SerializeField] private Texture profilePicture;
+   [SerializeField] private int avatarIndex = 0;
 
    private void Awake()
    {
@@ -36,6 +37,8 @@ public class LoginManager : MonoBehaviour
          Debug.Log("<color=green> Login successful!! </color>");
          TriggerLoginEvent();
          SetUsername(data.username);
+         avatarIndex = data.profilePictureIndex - 1;
+         SetProfilePicture();
          EconomyManager.Instance.FetchWalletBalance(() =>
          {
             Debug.Log("<color=green>Successfully retrieved wallet balance</color>");
@@ -54,15 +57,14 @@ public class LoginManager : MonoBehaviour
       FindFirstObjectByType<MainMenu>(FindObjectsInactive.Include)?.SetProfileName(username);
    }
    
-   public void SetProfilePicture(Texture profilePicture)
+   public void SetProfilePicture()
    {
-      this.profilePicture = profilePicture;
-      FindFirstObjectByType<MainMenu>(FindObjectsInactive.Include) ?.SetProfileImage(profilePicture);
+      FindFirstObjectByType<MainMenu>(FindObjectsInactive.Include) ?.SetProfileImage(GetProfilePicture());
    }
 
-   public Texture GetProfilePicture()
+   public Sprite GetProfilePicture()
    {
-      return profilePicture;
+      return UnifiedAuthManager.Instance.GetProfilePictureForId(avatarIndex);
    }
 
    public string GetUsername()

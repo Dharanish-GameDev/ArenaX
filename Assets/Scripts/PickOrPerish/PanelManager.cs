@@ -23,10 +23,6 @@ public class PanelManager : MonoBehaviour
 
     [SerializeField] private GameObject afterRoundObj;
     [SerializeField] private TextMeshProUGUI targetNumberText;
-   // [SerializeField] private TextMeshProUGUI winnerNameText;
-
-    // [SerializeField] private GameObject winnerUIObj;
-    // [SerializeField] private TextMeshProUGUI overallWinnerText;
 
     [SerializeField] private GameObject winnerAnnouncementPanel;
     [SerializeField] private GameObject winnerUIObj;
@@ -38,6 +34,8 @@ public class PanelManager : MonoBehaviour
 
     [SerializeField] private GameObject waitingUIObj;
     [SerializeField] private float winnerAnnouncementDelay = 2f;
+    
+    [SerializeField] private FriendRequestUIItem friendRequestUIItem;
 
 
     private void Awake()
@@ -180,20 +178,13 @@ public class PanelManager : MonoBehaviour
     public void UpdateAfterRoundUI(int[] winnerIds, float targetNumber)
     {
         afterRoundObj.SetActive(true);
-        //
-        // // Show winner(s) or no winner
-        // if (winnerIds == null || winnerIds.Length == 0)
-        // {
-        //     winnerNameText.text = "No Winner";
-        // }
-        // else
-        // {
-        //     winnerNameText.text = string.Join(", ", winnerIds.Select(id => "Player_" + id));
-        // }
-        
-        
-
         targetNumberText.text = Mathf.RoundToInt(targetNumber).ToString();
         Invoke(nameof(DisableAfterRoundUI),2.5f);
+    }
+
+    public void ShowFriendRequestUIItem(string Uid, string profilePic, string name)
+    {
+        friendRequestUIItem.gameObject.SetActive(true);
+        friendRequestUIItem.SetupUIItem(Uid, profilePic, name);
     }
 }

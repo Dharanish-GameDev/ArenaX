@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using Arena.API.Models;
 using UnityEngine;
 using Facebook.Unity;
 using Firebase.Auth;
@@ -21,7 +23,7 @@ public class AuthRequest
     public string platform;
     public string email;
     public string name;
-    public string profileImage;
+    public int profileImage;
 
     public static string ToDebugString(AuthRequest r)
     {
@@ -47,6 +49,12 @@ public class AuthRequest
     }
 }
 
+[Serializable]
+public class UpdatedProfile
+{
+    public string message;
+    public BackendUser user;
+}
 
 [Serializable]
 public class BackendUser
@@ -55,7 +63,8 @@ public class BackendUser
     public string email;
     public string name;
     public string contact;
-    public string profileImage;
+    public int profileImage;
+    public string createdAt;
 }
 
 [Serializable]
@@ -78,9 +87,10 @@ public class UserData
     public int experience;
     public int coins;
     public int gems;
-    public string profilePictureUrl;
+    public int profilePictureIndex = 1;
     public bool isGuest;
     public bool isNewUser;
+    public string contact;
 
     public static UserData FromAuthResponse(AuthResponse response)
     {
@@ -89,13 +99,14 @@ public class UserData
             id = response.user.id,
             username = response.user.name,
             email = response.user.email,
-            profilePictureUrl = response.user.profileImage,
+            profilePictureIndex = response.user.profileImage,
             level = 1,
             coins = 1000,
             gems = 50,
             experience = 0,
             isGuest = false,
-            isNewUser = response.isNewUser
+            isNewUser = response.isNewUser,
+            contact = response.user.contact
         };
     }
 }
@@ -120,6 +131,11 @@ public class UnifiedAuthManager : MonoBehaviour
 
     [Header("Parallel Sync Mode")]
     [SerializeField] private AuthRequest parallelSyncAuthRequest;
+    
+    
+    [Header("Avatars SO")]
+    [SerializeField] private AvatarsSO avatarsSO;
+    [SerializeField] private Sprite defaultAvatar;
 
     public event Action<UserData> OnLoginSuccess;
     public event Action<string> OnLoginFailed;
@@ -131,6 +147,8 @@ public class UnifiedAuthManager : MonoBehaviour
     private string refreshToken;
     private string deviceId;
     private string currentProvider;
+
+    private string socialMediaName = "User";
 
     public enum EditorTestMode
     {
@@ -361,7 +379,7 @@ public class UnifiedAuthManager : MonoBehaviour
             platform = GetPlatformString(),
             email = user.Email,
             name = user.DisplayName,
-            profileImage = user.ImageUrl?.ToString()
+            // profileImage = user.ImageUrl?.ToString()
         };
 
         SendAuthToBackend(request, "google");
@@ -394,7 +412,7 @@ public class UnifiedAuthManager : MonoBehaviour
                 platform = GetPlatformString(),
                 email = email,
                 name = name,
-                profileImage = $"https://graph.facebook.com/{id}/picture?type=large"
+                // profileImage = $"https://graph.facebook.com/{id}/picture?type=large"
             };
 
             SendAuthToBackend(request, "facebook");
@@ -422,6 +440,7 @@ public class UnifiedAuthManager : MonoBehaviour
                 string buffer = AuthRequest.ToDebugString(request);
                 GUIUtility.systemCopyBuffer = buffer;
                 OnBackendAuthSuccess(res, provider);
+                socialMediaName = request.name;
             },
             err => OnBackendAuthFailed(err, provider),
             JsonConvert.SerializeObject(request)
@@ -439,7 +458,6 @@ public class UnifiedAuthManager : MonoBehaviour
         ApiManager.Instance.SetAuthToken(accessToken);
 
         currentUser = UserData.FromAuthResponse(response);
-        // after currentUser = UserData.FromAuthResponse(response);
         SetPhotonPlayerIdentity(currentUser.username);
 
         currentProvider = provider;
@@ -447,6 +465,12 @@ public class UnifiedAuthManager : MonoBehaviour
         PlayerPrefs.SetString("UserData", JsonConvert.SerializeObject(currentUser));
 
         Debug.Log($"[AUTH] Login Success → UID: {currentUser.id}");
+        Debug.Log("Profile Index : " + currentUser.profilePictureIndex);
+
+        if (response.user.name == "string")
+        {
+            UpdateUserName(socialMediaName,()=> {});
+        }
         
         OnLoginSuccess?.Invoke(currentUser);
     }
@@ -533,6 +557,61 @@ public class UnifiedAuthManager : MonoBehaviour
 
     public UserData GetCurrentUser() => currentUser;
     public bool IsLoggedIn() => currentUser != null;
+
+    public Sprite GetProfilePictureForId(int id)
+    {
+        if (avatarsSO == null || avatarsSO.avatars == null || avatarsSO.avatars.Count == 0)
+            return defaultAvatar;
+
+        if (id < 0 || id >= avatarsSO.avatars.Count)
+            return defaultAvatar;
+
+        return avatarsSO.avatars[id] ?? defaultAvatar;
+    }
+
+    public void UpdateProfilePicture(int index, Action onComplete)
+    {
+       
+       UpdateUserProfileRequest request = new UpdateUserProfileRequest();
+       request.name = currentUser.username;
+       request.contact = "123456789";
+       request.profileImage = index;
+        
+       string json = JsonConvert.SerializeObject(request);
+        
+       ApiManager.Instance.SendRequest<UpdatedProfile>(ApiEndPoints.User.PutUserProfile,RequestMethod.PUT,(profile =>
+       {
+           currentUser.profilePictureIndex = profile.user.profileImage;
+           PlayerPrefs.SetString("UserData", JsonConvert.SerializeObject(currentUser));
+       }), (er =>
+       {
+           Debug.Log(er);
+       }),json);
+    }
+
+    public void UpdateUserName(string username, Action onComplete)
+    {
+        if(string.IsNullOrEmpty(username)) return;
+
+        UpdateUserProfileRequest request = new UpdateUserProfileRequest();
+        request.name = username;
+        request.contact = "123456789";
+        request.profileImage = currentUser.profilePictureIndex;
+        
+        string json = JsonConvert.SerializeObject(request);
+        
+        ApiManager.Instance.SendRequest<UpdatedProfile>(ApiEndPoints.User.PutUserProfile,RequestMethod.PUT,(profile =>
+        {
+            currentUser.username = profile.user.name;
+            LoginManager.instance.SetUsername(username);
+            PlayerPrefs.SetString("UserData", JsonConvert.SerializeObject(currentUser));
+        }), (er =>
+        {
+            Debug.Log(er);
+        }),json);
+        
+        
+    }
 
     #endregion
 }

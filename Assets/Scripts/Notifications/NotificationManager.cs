@@ -1,6 +1,7 @@
 using UnityEngine;
 using Newtonsoft.Json;
 using System;
+using System.Collections.Generic;
 using Arena.API.Models;
 
 public class NotificationsManager : MonoBehaviour
@@ -20,15 +21,19 @@ public class NotificationsManager : MonoBehaviour
         }
     }
 
-    public void GetNotifications(Action<NotificationsResponse> onSuccess, Action<string> onError)
+    public void GetNotifications(Action<List<NotificationItem>> onSuccess, Action<string> onError)
     {
-        ApiManager.Instance.SendRequest<NotificationsResponse>(
+        ApiManager.Instance.SendRequest(
             ApiEndPoints.Notifications.GetNotifications,
             RequestMethod.GET,
             (res) =>
             {
-                Debug.Log($"Notifications received: {res?.notifications?.Count ?? 0}");
-                onSuccess?.Invoke(res);
+                Debug.Log("Notifications raw: " + res);
+
+                List<NotificationItem> notifications =
+                    JsonConvert.DeserializeObject<List<NotificationItem>>(res);
+
+                onSuccess?.Invoke(notifications);
             },
             (err) =>
             {
@@ -37,6 +42,8 @@ public class NotificationsManager : MonoBehaviour
             }
         );
     }
+    
+
 
     public void Respond(string notificationId, bool accept, Action<bool, string> onComplete)
     {

@@ -16,7 +16,11 @@ public class PlayerUISet : MonoBehaviour
 
     [SerializeField] private TextMeshProUGUI scoreText;
    // [SerializeField] private TMP_InputField numberInput;
-    [SerializeField] private Button submitButton;
+    //[SerializeField] private Button submitButton;
+    
+    [SerializeField] private Button friendRequestButton;
+
+    [SerializeField] private string Uid;
     
     [SerializeField] private GameObject elimitatedObject;
 
@@ -52,7 +56,15 @@ public class PlayerUISet : MonoBehaviour
           name = temp;
           if(playerNameText != null)
               playerNameText.SetText(temp);
-          ImageLoader.Load(playerInfo.avatarUrl,playerIconImage);
+
+          if (int.TryParse(playerInfo.avatarIndex, out int index))
+          {
+             playerIconImage.sprite = UnifiedAuthManager.Instance.GetProfilePictureForId(index - 1);
+          }
+          // ImageLoader.Load(playerInfo.avatarIndex,playerIconImage);
+          
+          Uid = playerInfo.uid;
+          
          // playerIconImage.sprite = playerDataSO.playerIcon;
           //coinsCountText.SetText(playerDataSO.coinsValue.ToString());
 
@@ -68,24 +80,19 @@ public class PlayerUISet : MonoBehaviour
           }
 
           
-          // if (!_networkPlayer.IsOwner)
-          // {
-          //     submitButton.gameObject.SetActive(false);
-          //     numberInput.interactable = false;
-          //     numberInput.contentType = TMP_InputField.ContentType.Password;
-          // }
-          // else
-          // {
-          //     submitButton.onClick.RemoveAllListeners();
-          //     submitButton.onClick.AddListener(() =>
-          //     {
-          //         if (int.TryParse(numberInput.text, out int number))
-          //         {
-          //             SetSubmitButtonInteractable(false);
-          //             
-          //         }
-          //     });
-          // }
+          if (_networkPlayer.IsOwner)
+          {
+              friendRequestButton.enabled = false;
+          }
+          else
+          {
+              friendRequestButton.onClick.RemoveAllListeners();
+              friendRequestButton.onClick.AddListener(() =>
+                  {
+                      NetworkGameManager.Instance.PanelManager.ShowFriendRequestUIItem(Uid, playerInfo.avatarIndex, playerInfo.name);
+                  }
+              );
+          }
 
           // if (NumbersHandler.instance != null)
           // {

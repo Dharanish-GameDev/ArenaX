@@ -14,9 +14,11 @@ public class MainMenu : MonoBehaviour
     [SerializeField] private GameObject profilePage;
     [SerializeField] private GameObject dailyRewardsPage;
     [SerializeField] private GameObject coinsStorePage;
+    [SerializeField] private GameObject notificationsPage;
+    [SerializeField] private GameObject friendListPage; 
     
     [SerializeField] private TextMeshProUGUI profileName;
-    [SerializeField] private RawImage profileImage;
+    [SerializeField] private Image profileImage;
     
     
     
@@ -35,7 +37,8 @@ public class MainMenu : MonoBehaviour
         screens.Add(profilePage);
         screens.Add(dailyRewardsPage);
         screens.Add(coinsStorePage);
-
+        
+        
         if (!isLoadedAlready)
         {
             loadingScreen.SetActive(true);
@@ -80,9 +83,10 @@ public class MainMenu : MonoBehaviour
             this.profileName.text = profileName;
     }
 
-    public void SetProfileImage(Texture profileImage)
+    public void SetProfileImage(Sprite profileImage)
     {
-        this.profileImage.texture = profileImage;
+        if(this.profileImage == null) return;
+        this.profileImage.sprite = profileImage;
     }
 
     private GameObject GetCurrentEnabledScreen()
@@ -167,6 +171,49 @@ public class MainMenu : MonoBehaviour
     public void HideCoinsStorePage()
     {
         coinsStorePage.SetActive(false);
+        if (lastScreen != null)
+        {
+            lastScreen.SetActive(true);
+        }
+        else
+        {
+            landingPage.SetActive(true);
+        }
+        lastScreen = null;
+    }
+
+    public void ShowNotificationsPage()
+    {
+        lastScreen = GetCurrentEnabledScreen();
+        lastScreen.gameObject.SetActive(false);
+        notificationsPage.SetActive(true);
+    }
+
+    public void HideNotificationsPage()
+    {
+        notificationsPage.SetActive(false);
+        
+        if (lastScreen != null)
+        {
+            lastScreen.SetActive(true);
+        }
+        else
+        {
+            landingPage.SetActive(true);
+        }
+        lastScreen = null;
+    }
+    
+    public void ShowFriendListPage()
+    {
+        lastScreen = GetCurrentEnabledScreen();
+        // lastScreen.gameObject.SetActive(false);
+        friendListPage.SetActive(true);
+    }
+
+    public void HideFriendListPage()
+    {
+        friendListPage.SetActive(false);
         if (lastScreen != null)
         {
             lastScreen.SetActive(true);

@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using Arena.API.Models;
 using Newtonsoft.Json;
@@ -18,18 +19,46 @@ public class FriendsManager : MonoBehaviour
             return instance;
         }
     }
+    
+
 
     /// <summary>
     /// Get list of friends from server
     /// </summary>
-    public void GetFriendsList(System.Action<FriendListResponse> onSuccess, System.Action<string> onError)
+    public void GetFriendsList(
+        int page,
+        int limit,
+        FriendshipStatus status,
+        Action<FriendListResponse> onSuccess,
+        Action<string> onError)
     {
+        string url =
+            $"{ApiEndPoints.User.GetUserList}?page={page}&limit={limit}&status={status}";
+
         ApiManager.Instance.SendRequest<FriendListResponse>(
-            ApiEndPoints.Friends.List,
+            url,
             RequestMethod.GET,
             (response) =>
             {
-                Debug.Log($"Friends list received. Count: {response?.friends?.Count ?? 0}");
+                Debug.Log($"Friends list => Page:{response.page}  Count:{response.users?.Count ?? 0}  Total:{response.total}");
+                onSuccess?.Invoke(response);
+            },
+            (error) =>
+            {
+                Debug.LogError("Friends list fetch failed => " + error);
+                onError?.Invoke(error);
+            }
+        );
+    }
+
+
+    public void GetIncomingFriendRequests(System.Action<FriendRequestsResponse> onSuccess, System.Action<string> onError)
+    {
+        ApiManager.Instance.SendRequest<FriendRequestsResponse>(
+            ApiEndPoints.Friends.IncomingRequest,
+            RequestMethod.GET,
+            (response) =>
+            {
                 onSuccess?.Invoke(response);
             },
             (error) =>
@@ -39,60 +68,41 @@ public class FriendsManager : MonoBehaviour
             }
         );
     }
-
-    /// <summary>
-    /// Get Facebook friends who are using the app
-    /// </summary>
-    public void GetFacebookFriends(System.Action<FacebookFriendsResponse> onSuccess, System.Action<string> onError)
-    {
-        ApiManager.Instance.SendRequest<FacebookFriendsResponse>(
-            ApiEndPoints.Friends.FacebookFriends,
-            RequestMethod.GET,
-            (response) =>
-            {
-                Debug.Log($"Facebook friends received. Count: {response?.friends?.Count ?? 0}");
-                onSuccess?.Invoke(response);
-            },
-            (error) =>
-            {
-                Debug.LogError($"Failed to get Facebook friends: {error}");
-                onError?.Invoke(error);
-            }
-        );
-    }
+    
 
     /// <summary>
     /// Send friend request to another user
     /// </summary>
-    public void SendFriendRequest(string friendId, System.Action<bool, string> onComplete)
+    public void SendFriendRequest(string friendId, System.Action<string> onComplete)
     {
         var requestData = new SendFriendRequest
         {
-            friendId = friendId
+            toUserId = friendId
         };
 
         string json = JsonConvert.SerializeObject(requestData);
 
-        ApiManager.Instance.SendRequest<BaseResponse>(
+        ApiManager.Instance.SendRequest(
             ApiEndPoints.Friends.SendRequest,
             RequestMethod.POST,
             (response) =>
             {
-                if (response != null && response.success)
-                {
-                    Debug.Log($"Friend request sent to {friendId}");
-                    onComplete?.Invoke(true, response.message ?? "Request sent successfully");
-                }
-                else
-                {
-                    Debug.LogWarning($"Friend request failed for {friendId}");
-                    onComplete?.Invoke(false, response?.message ?? "Failed to send request");
-                }
+                Debug.Log("Friend request sent Response : " + response);
+                // if (response != null && response.success)
+                // {
+                //     Debug.Log($"Friend request sent to {friendId}");
+                //     onComplete?.Invoke(true, response.message ?? "Request sent successfully");
+                // }
+                // else
+                // {
+                //     Debug.LogWarning($"Friend request failed for {friendId}");
+                //     onComplete?.Invoke(false, response?.message ?? "Failed to send request");
+                // }
             },
             (error) =>
             {
                 Debug.LogError($"Failed to send friend request: {error}");
-                onComplete?.Invoke(false, error);
+                //onComplete?.Invoke(false, error);
             },
             json
         );
@@ -101,32 +111,27 @@ public class FriendsManager : MonoBehaviour
     /// <summary>
     /// Accept or decline a friend request
     /// </summary>
-    public void RespondToFriendRequest(string requestId, bool accept, System.Action<bool, string> onComplete)
+    public void RespondToFriendRequest(
+        string requestId,
+        bool accept,
+        System.Action<bool, string> onComplete)
     {
         var requestData = new RespondFriendRequest
         {
             requestId = requestId,
-            accept = accept
+            action = accept ? "accept" : "reject"
         };
 
         string json = JsonConvert.SerializeObject(requestData);
+        Debug.Log("Respond Payload => " + json);
 
-        ApiManager.Instance.SendRequest<BaseResponse>(
+        ApiManager.Instance.SendRequest(
             ApiEndPoints.Friends.RespondRequest,
             RequestMethod.POST,
             (response) =>
             {
-                if (response != null && response.success)
-                {
-                    string action = accept ? "accepted" : "declined";
-                    Debug.Log($"Friend request {action}: {requestId}");
-                    onComplete?.Invoke(true, response.message ?? $"Request {action}");
-                }
-                else
-                {
-                    Debug.LogWarning($"Failed to respond to friend request: {requestId}");
-                    onComplete?.Invoke(false, response?.message ?? "Failed to respond to request");
-                }
+                Debug.Log("Friend request respond success: " + response);
+                onComplete?.Invoke(true, response);
             },
             (error) =>
             {
@@ -136,4 +141,6 @@ public class FriendsManager : MonoBehaviour
             json
         );
     }
+
+
 }

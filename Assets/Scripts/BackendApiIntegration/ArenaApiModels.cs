@@ -79,46 +79,52 @@ namespace Arena.API.Models
     // =========================
 
     [Serializable]
-    public class Friend
+    public class FriendUser
     {
         public string id;
         public string name;
-        public string profileImage;
-        public string status;
+        public string email;
+        public string contact;
+        public int profileImage;
+        public string friendshipStatus; // ACCEPTED, PENDING, BLOCKED
     }
+
 
     [Serializable]
     public class FriendListResponse
     {
-        public List<Friend> friends;
+        public int page;
+        public int limit;
+        public int total;
+        public List<FriendUser> users;
     }
-
-    [Serializable]
-    public class FacebookFriendsResponse
+    public enum FriendshipStatus
     {
-        public List<FacebookFriend> friends;
+        ACCEPTED,
+        PENDING,
+        BLOCKED
     }
 
-    [Serializable]
-    public class FacebookFriend
-    {
-        public string id;
-        public string name;
-        public string profileImage;
-    }
-
+    
     [Serializable]
     public class SendFriendRequest
     {
-        public string friendId;
+        public string toUserId;
     }
 
     [Serializable]
     public class RespondFriendRequest
     {
         public string requestId;
-        public bool accept;
+        public string action;
     }
+    
+    public enum FriendRequestAction
+    {
+        ACCEPT,
+        REJECT
+    }
+
     
     [Serializable]
     public class BaseResponse
@@ -126,7 +132,25 @@ namespace Arena.API.Models
         public bool success;
         public string message;
     }
-
+    [Serializable]
+    public class IncomingFriendRequestItem
+    {
+        public string requestId;
+        public FriendRequestStatus status;
+        public string createdAt;
+        public BackendUser sender;
+    }
+    public enum FriendRequestStatus
+    {
+        PENDING,
+        ACCEPTED,
+        REJECTED
+    }
+    [Serializable]
+    public class FriendRequestsResponse
+    {
+        public List<IncomingFriendRequestItem> requests;
+    }
     // =========================
     // Games
     // =========================
@@ -179,7 +203,7 @@ namespace Arena.API.Models
     [Serializable]
     public class NotificationsResponse
     {
-        public List<NotificationItem> notifications;
+        public List<NotificationItem> notifications = new List<NotificationItem>();
     }
 
     [Serializable]
@@ -188,7 +212,18 @@ namespace Arena.API.Models
         public string id;
         public string type;
         public string message;
-        public string createdAt; // date-time string
+        public bool seen;
+
+        // Keep as string if you're directly binding API values
+        public string createdAt;
+        public string updatedAt;
+
+        // Optional helper properties if you want DateTime parsing
+        public DateTime CreatedAtDate =>
+            DateTime.TryParse(createdAt, out var dt) ? dt : DateTime.MinValue;
+
+        public DateTime UpdatedAtDate =>
+            DateTime.TryParse(updatedAt, out var dt) ? dt : DateTime.MinValue;
     }
 
     [Serializable]
@@ -382,6 +417,16 @@ namespace Arena.API.Models
     {
         public bool canEnter;
         public string message;
+    }
+    
+    
+    // User
+
+    public class UpdateUserProfileRequest
+    {
+        public string name;
+        public string contact;
+        public int profileImage;
     }
     
 }

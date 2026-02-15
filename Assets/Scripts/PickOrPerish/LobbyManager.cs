@@ -27,7 +27,7 @@ public class LobbyManager : MonoBehaviour
 
     private const string PLAYER_UID_KEY = "UID";
     private const string PLAYER_NAME_KEY = "NAME";
-    private const string PLAYER_AVATAR_KEY = "AVATAR";
+    private const string PLAYER_AVATAR_KEY = "1";
 
     private bool isHost;
     private bool isGameStarted;
@@ -55,7 +55,7 @@ public class LobbyManager : MonoBehaviour
     {
         public string uid;
         public string name;
-        public string avatarUrl;
+        public string avatarIndex;
     }
 
     public List<LobbyPlayerInfo> GetJoinedPlayers()
@@ -73,7 +73,7 @@ public class LobbyManager : MonoBehaviour
             {
                 uid = data != null && data.ContainsKey(PLAYER_UID_KEY) ? data[PLAYER_UID_KEY].Value : "",
                 name = data != null && data.ContainsKey(PLAYER_NAME_KEY) ? data[PLAYER_NAME_KEY].Value : "Unknown",
-                avatarUrl = data != null && data.ContainsKey(PLAYER_AVATAR_KEY) ? data[PLAYER_AVATAR_KEY].Value : ""
+                avatarIndex = data != null && data.ContainsKey(PLAYER_AVATAR_KEY) ? data[PLAYER_AVATAR_KEY].Value : "0"
             });
         }
 
@@ -141,7 +141,7 @@ public class LobbyManager : MonoBehaviour
         {
             { PLAYER_UID_KEY, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, user.id) },
             { PLAYER_NAME_KEY, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, user.username) },
-            { PLAYER_AVATAR_KEY, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, user.profilePictureUrl) }
+            { PLAYER_AVATAR_KEY, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, user.profilePictureIndex.ToString()) }
         };
     }
 

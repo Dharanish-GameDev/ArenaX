@@ -8,13 +8,15 @@ public class LobbyPlayerSlotUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI nameText;
     [SerializeField] private GameObject placeHolder;
 
-    public void Set(string playerName, string avatarUrl)
+    public void Set(string playerName, string avatarIndex)
     {
         if(nameText != null)
             nameText.text = playerName;
-
-        if (!string.IsNullOrEmpty(avatarUrl))
-            ImageLoader.Load(avatarUrl, avatarImage);
+        
+        if (int.TryParse(avatarIndex, out int index))
+        {
+            avatarImage.sprite = UnifiedAuthManager.Instance.GetProfilePictureForId(index - 1);
+        }
 
         if (placeHolder != null)
         {
