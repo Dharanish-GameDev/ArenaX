@@ -7,6 +7,7 @@ public static class ApiEndPoints
         public const string Google = "/auth/google";
         public const string Refresh = "/auth/refresh";
         public const string Facebook = "/auth/facebook";
+        public const string Apple = "/auth/apple";
     }
 
     public static class Friends

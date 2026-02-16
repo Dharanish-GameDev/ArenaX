@@ -154,8 +154,7 @@ public class StoreManager : MonoBehaviour
             Debug.LogError($"Item with ID {itemId} not found in store");
             onComplete?.Invoke(new PurchaseResponse 
             { 
-                success = false, 
-                message = "Item not found" 
+                success = false
             });
             return;
         }
@@ -171,8 +170,9 @@ public class StoreManager : MonoBehaviour
 
         var purchaseRequest = new PurchaseRequest
         {
-            itemId = itemId,
-            receipt = receipt
+            productId = itemId,
+            receipt = receipt,
+            platform = "android"
         };
         
         string json = JsonConvert.SerializeObject(purchaseRequest);
@@ -186,13 +186,11 @@ public class StoreManager : MonoBehaviour
                 {
                     if (response.success)
                     {
-                        Debug.Log($"Purchase successful: {response.message}");
                         OnItemPurchased?.Invoke(item);
                     }
                     else
                     {
-                        Debug.LogError($"Purchase failed: {response.message}");
-                        OnPurchaseFailed?.Invoke(response.message);
+                        OnPurchaseFailed?.Invoke("Failed to Complete Purchase");
                     }
                 }
                 onComplete?.Invoke(response);
@@ -203,7 +201,6 @@ public class StoreManager : MonoBehaviour
                 var errorResponse = new PurchaseResponse
                 {
                     success = false,
-                    message = $"Network error: {error}"
                 };
                 OnPurchaseFailed?.Invoke(error);
                 onComplete?.Invoke(errorResponse);
@@ -224,7 +221,6 @@ public class StoreManager : MonoBehaviour
             var response = new PurchaseResponse
             {
                 success = true,
-                message = $"Successfully purchased {item.name}!"
             };
             
             Debug.Log($"<color=green>[SIMULATED]</color> Purchase successful: {item.name}");
@@ -236,11 +232,10 @@ public class StoreManager : MonoBehaviour
             var response = new PurchaseResponse
             {
                 success = false,
-                message = "Simulated purchase failure"
             };
             
             Debug.Log($"<color=red>[SIMULATED]</color> Purchase failed: {item.name}");
-            OnPurchaseFailed?.Invoke(response.message);
+            OnPurchaseFailed?.Invoke("Purchase failed");
             onComplete?.Invoke(response);
         }
     }

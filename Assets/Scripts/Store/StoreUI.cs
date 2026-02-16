@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Arena.API.Models;
+using UnityEngine.Purchasing;
 
 public class StoreUI : MonoBehaviour
 {
@@ -72,20 +73,9 @@ public class StoreUI : MonoBehaviour
             storeItemUI.name = item.name;
             if (storeItemUI != null)
             {
-                storeItemUI.Initialize(item, OnItemButtonClicked);
+                storeItemUI.Initialize(item);
             }
         }
-    }
-
-    private void OnItemButtonClicked(StoreItem item)
-    {
-        StoreManager.Instance.PurchaseItem(item.id, "", (response) =>
-        {
-            if (response.success)
-            {
-                Debug.Log($"Purchased {item.name} successfully!");
-            }
-        });
     }
 
     private void OnItemPurchased(StoreItem item)

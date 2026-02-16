@@ -8,6 +8,12 @@ using Facebook.Unity;
 using Firebase.Auth;
 using Google;
 using Newtonsoft.Json;
+using System.Text;
+using AppleAuth;
+using AppleAuth.Enums;
+using AppleAuth.Extensions;
+using AppleAuth.Interfaces;
+using AppleAuth.Native;
 
 #if UNITY_EDITOR
 using ParrelSync;
@@ -111,6 +117,14 @@ public class UserData
     }
 }
 
+[Serializable]
+public class UpdateUserProfileRequest
+{
+    public string name;
+    public string contact;
+    public int profileImage;
+}
+
 #endregion
 
 public class UnifiedAuthManager : MonoBehaviour
@@ -132,7 +146,6 @@ public class UnifiedAuthManager : MonoBehaviour
     [Header("Parallel Sync Mode")]
     [SerializeField] private AuthRequest parallelSyncAuthRequest;
     
-    
     [Header("Avatars SO")]
     [SerializeField] private AvatarsSO avatarsSO;
     [SerializeField] private Sprite defaultAvatar;
@@ -149,6 +162,10 @@ public class UnifiedAuthManager : MonoBehaviour
     private string currentProvider;
 
     private string socialMediaName = "User";
+    
+    // Apple Sign-In
+    private IAppleAuthManager appleAuthManager;
+    private const string AppleUserIdKey = "AppleUserId";
 
     public enum EditorTestMode
     {
@@ -156,6 +173,7 @@ public class UnifiedAuthManager : MonoBehaviour
         DefaultEditor,
         ParallelSync
     }
+    
     private const string PROP_NAME = "NAME";
 
     private void SetPhotonPlayerIdentity(string username)
@@ -173,13 +191,9 @@ public class UnifiedAuthManager : MonoBehaviour
         }
     }
 
-
     #region Unity Lifecycle
 
-
-
     private void Awake()
-
     {
         if (Instance != null)
         {
@@ -196,6 +210,9 @@ public class UnifiedAuthManager : MonoBehaviour
             deviceId = PlayerPrefs.GetString("DeviceId", Guid.NewGuid().ToString());
             PlayerPrefs.SetString("DeviceId", deviceId);
         }
+
+        // Initialize Apple Sign-In
+        InitializeAppleSignIn();
 
 #if UNITY_EDITOR
         editorTestMode = ClonesManager.IsClone()
@@ -220,9 +237,27 @@ public class UnifiedAuthManager : MonoBehaviour
         }
     }
 
+    private void Update()
+    {
+        // Update Apple Auth Manager
+        if (appleAuthManager != null)
+        {
+            appleAuthManager.Update();
+        }
+    }
+
     #endregion
 
     #region Initialization
+
+    private void InitializeAppleSignIn()
+    {
+        if (AppleAuthManager.IsCurrentPlatformSupported)
+        {
+            var deserializer = new PayloadDeserializer();
+            appleAuthManager = new AppleAuthManager(deserializer);
+        }
+    }
 
     private IEnumerator InitializeFacebook()
     {
@@ -355,6 +390,139 @@ public class UnifiedAuthManager : MonoBehaviour
         });
     }
 
+   public void LoginWithApple()
+{
+#if UNITY_EDITOR
+    if (editorTestMode != EditorTestMode.None)
+    {
+        AuthRequest request = editorTestMode == EditorTestMode.DefaultEditor
+            ? defaultEditorAuthRequest
+            : parallelSyncAuthRequest;
+
+        if (request != null && !string.IsNullOrEmpty(request.idToken))
+        {
+            LoginWithEditorRequest(request);
+            return;
+        }
+    }
+#endif
+
+    if (appleAuthManager == null)
+    {
+        OnLoginFailed?.Invoke("Apple Sign-In not supported on this platform");
+        return;
+    }
+
+    var loginArgs = new AppleAuthLoginArgs(LoginOptions.IncludeEmail | LoginOptions.IncludeFullName);
+
+    appleAuthManager.LoginWithAppleId(
+        loginArgs,
+        credential =>
+        {
+            var appleIdCredential = credential as IAppleIDCredential;
+            if (appleIdCredential != null)
+            {
+                HandleAppleSignInSuccess(appleIdCredential);
+            }
+        },
+        error =>
+        {
+            // GetAuthorizationErrorCode returns the enum value directly, not nullable
+            var authorizationErrorCode = error.GetAuthorizationErrorCode();
+            
+            string errorMessage;
+            
+            // Check if it's a user cancellation
+            if (authorizationErrorCode == AuthorizationErrorCode.Canceled)
+            {
+                errorMessage = "Apple Sign-In was cancelled";
+                Debug.Log($"[APPLE] {errorMessage}");
+                // Don't trigger failure callback for user cancellation
+                return;
+            }
+            
+            // Handle other error codes
+            switch (authorizationErrorCode)
+            {
+                case AuthorizationErrorCode.Unknown:
+                    errorMessage = "Apple Sign-In failed with unknown error";
+                    break;
+                case AuthorizationErrorCode.InvalidResponse:
+                    errorMessage = "Apple Sign-In received invalid response";
+                    break;
+                case AuthorizationErrorCode.NotHandled:
+                    errorMessage = "Apple Sign-In was not handled";
+                    break;
+                case AuthorizationErrorCode.Failed:
+                    errorMessage = "Apple Sign-In failed";
+                    break;
+                case AuthorizationErrorCode.Canceled:
+                    errorMessage = "Apple Sign-In was cancelled";
+                    break; // Already handled above, but keeping for completeness
+                default:
+                    errorMessage = $"Apple Sign-In failed with error code: {authorizationErrorCode}";
+                    break;
+            }
+            
+            Debug.LogError($"[APPLE] {errorMessage}");
+            OnLoginFailed?.Invoke(errorMessage);
+        });
+}
+
+    #endregion
+
+    #region Apple Login Handlers
+
+    private void HandleAppleSignInSuccess(IAppleIDCredential appleIdCredential)
+    {
+        // Save user ID for potential quick login
+        var userId = appleIdCredential.User;
+        PlayerPrefs.SetString(AppleUserIdKey, userId);
+    
+        // Get user info
+        string email = appleIdCredential.Email;
+        string name = "";
+    
+        if (appleIdCredential.FullName != null)
+        {
+            var fullName = appleIdCredential.FullName;
+            name = $"{fullName.GivenName} {fullName.FamilyName}".Trim();
+        
+            if (string.IsNullOrEmpty(name))
+                name = fullName.GivenName ?? fullName.FamilyName ?? "Apple User";
+        }
+    
+        if (string.IsNullOrEmpty(name))
+            name = "Apple User";
+        
+        if (string.IsNullOrEmpty(email))
+            email = $"{userId}@apple.private.com"; // Fallback email for private relay
+
+        // Get identity token
+        string identityToken = appleIdCredential.IdentityToken != null
+            ? Encoding.UTF8.GetString(appleIdCredential.IdentityToken, 0, appleIdCredential.IdentityToken.Length)
+            : null;
+
+        if (string.IsNullOrEmpty(identityToken))
+        {
+            OnLoginFailed?.Invoke("Failed to get Apple identity token");
+            return;
+        }
+
+        var request = new AuthRequest
+        {
+            idToken = identityToken,
+            deviceId = deviceId,
+            platform = GetPlatformString(),
+            email = email,
+            name = name,
+            profileImage = 1 // Default profile image
+        };
+
+        SendAuthToBackend(request, "apple");
+        socialMediaName = name;
+    }
+
     #endregion
 
     #region Google Login
@@ -379,7 +547,7 @@ public class UnifiedAuthManager : MonoBehaviour
             platform = GetPlatformString(),
             email = user.Email,
             name = user.DisplayName,
-            // profileImage = user.ImageUrl?.ToString()
+            profileImage = 1
         };
 
         SendAuthToBackend(request, "google");
@@ -412,7 +580,7 @@ public class UnifiedAuthManager : MonoBehaviour
                 platform = GetPlatformString(),
                 email = email,
                 name = name,
-                // profileImage = $"https://graph.facebook.com/{id}/picture?type=large"
+                profileImage = 1
             };
 
             SendAuthToBackend(request, "facebook");
@@ -429,6 +597,7 @@ public class UnifiedAuthManager : MonoBehaviour
         {
             "google" => ApiEndPoints.Auth.Google,
             "facebook" => ApiEndPoints.Auth.Facebook,
+            "apple" => ApiEndPoints.Auth.Apple, // Make sure this endpoint exists
             _ => ApiEndPoints.Auth.Google
         };
 
@@ -440,7 +609,6 @@ public class UnifiedAuthManager : MonoBehaviour
                 string buffer = AuthRequest.ToDebugString(request);
                 GUIUtility.systemCopyBuffer = buffer;
                 OnBackendAuthSuccess(res, provider);
-                socialMediaName = request.name;
             },
             err => OnBackendAuthFailed(err, provider),
             JsonConvert.SerializeObject(request)
@@ -464,12 +632,12 @@ public class UnifiedAuthManager : MonoBehaviour
 
         PlayerPrefs.SetString("UserData", JsonConvert.SerializeObject(currentUser));
 
-        Debug.Log($"[AUTH] Login Success → UID: {currentUser.id}");
+        Debug.Log($"[AUTH] Login Success → UID: {currentUser.id} (Provider: {provider})");
         Debug.Log("Profile Index : " + currentUser.profilePictureIndex);
 
-        if (response.user.name == "string")
+        if (response.user.name == "string" || string.IsNullOrEmpty(response.user.name))
         {
-            UpdateUserName(socialMediaName,()=> {});
+            UpdateUserName(socialMediaName, () => {});
         }
         
         OnLoginSuccess?.Invoke(currentUser);
@@ -500,13 +668,9 @@ public class UnifiedAuthManager : MonoBehaviour
 
     public void Logout()
     {
-        // 0) Turn off auto-login for this session if you want
-        // (Optional) PlayerPrefs.SetInt("ManualLogout", 1);
-
-        // 1) Provider sign-out (IMPORTANT)
+        // Provider sign-out
         try
         {
-            // Google Sign-In: clears cached account so user must choose again
             GoogleSignIn.DefaultInstance.SignOut();
             GoogleSignIn.DefaultInstance.Disconnect();
         }
@@ -517,7 +681,6 @@ public class UnifiedAuthManager : MonoBehaviour
 
         try
         {
-            // Facebook
             if (FB.IsInitialized && FB.IsLoggedIn)
                 FB.LogOut();
         }
@@ -528,7 +691,6 @@ public class UnifiedAuthManager : MonoBehaviour
 
         try
         {
-            // Firebase (even if you didn't use it directly here, safe)
             if (firebaseAuth == null) firebaseAuth = FirebaseAuth.DefaultInstance;
             firebaseAuth.SignOut();
         }
@@ -537,23 +699,24 @@ public class UnifiedAuthManager : MonoBehaviour
             Debug.Log($"[AUTH] Firebase signout skipped/failed: {e.Message}");
         }
 
-        // 2) Clear backend session tokens stored locally
+        // Note: Apple Sign-In doesn't have a sign-out method, just clear local data
+
+        // Clear backend session tokens
         PlayerPrefs.DeleteKey("AccessToken");
         PlayerPrefs.DeleteKey("RefreshToken");
         PlayerPrefs.DeleteKey("UserData");
         PlayerPrefs.Save();
 
-        // 3) Clear API auth header / cached user
+        // Clear API auth header
         ApiManager.Instance.ClearAuthToken();
         accessToken = null;
         refreshToken = null;
         currentUser = null;
         currentProvider = null;
 
-        // 4) Notify UI
+        // Notify UI
         OnLogoutComplete?.Invoke();
     }
-
 
     public UserData GetCurrentUser() => currentUser;
     public bool IsLoggedIn() => currentUser != null;
@@ -571,46 +734,53 @@ public class UnifiedAuthManager : MonoBehaviour
 
     public void UpdateProfilePicture(int index, Action onComplete)
     {
-       
-       UpdateUserProfileRequest request = new UpdateUserProfileRequest();
-       request.name = currentUser.username;
-       request.contact = "123456789";
-       request.profileImage = index;
+        UpdateUserProfileRequest request = new UpdateUserProfileRequest();
+        request.name = currentUser.username;
+        request.contact = currentUser.contact ?? "123456789";
+        request.profileImage = index;
         
-       string json = JsonConvert.SerializeObject(request);
+        string json = JsonConvert.SerializeObject(request);
         
-       ApiManager.Instance.SendRequest<UpdatedProfile>(ApiEndPoints.User.PutUserProfile,RequestMethod.PUT,(profile =>
-       {
-           currentUser.profilePictureIndex = profile.user.profileImage;
-           PlayerPrefs.SetString("UserData", JsonConvert.SerializeObject(currentUser));
-       }), (er =>
-       {
-           Debug.Log(er);
-       }),json);
+        ApiManager.Instance.SendRequest<UpdatedProfile>(ApiEndPoints.User.PutUserProfile, RequestMethod.PUT, (profile) =>
+        {
+            currentUser.profilePictureIndex = profile.user.profileImage;
+            PlayerPrefs.SetString("UserData", JsonConvert.SerializeObject(currentUser));
+            onComplete?.Invoke();
+        }, (er) =>
+        {
+            Debug.Log(er);
+            onComplete?.Invoke();
+        }, json);
     }
 
     public void UpdateUserName(string username, Action onComplete)
     {
-        if(string.IsNullOrEmpty(username)) return;
+        if (string.IsNullOrEmpty(username)) 
+        {
+            onComplete?.Invoke();
+            return;
+        }
 
         UpdateUserProfileRequest request = new UpdateUserProfileRequest();
         request.name = username;
-        request.contact = "123456789";
+        request.contact = currentUser.contact ?? "123456789";
         request.profileImage = currentUser.profilePictureIndex;
         
         string json = JsonConvert.SerializeObject(request);
         
-        ApiManager.Instance.SendRequest<UpdatedProfile>(ApiEndPoints.User.PutUserProfile,RequestMethod.PUT,(profile =>
+        ApiManager.Instance.SendRequest<UpdatedProfile>(ApiEndPoints.User.PutUserProfile, RequestMethod.PUT, (profile) =>
         {
             currentUser.username = profile.user.name;
-            LoginManager.instance.SetUsername(username);
+            // Assuming LoginManager exists
+            if (LoginManager.instance != null)
+                LoginManager.instance.SetUsername(username);
             PlayerPrefs.SetString("UserData", JsonConvert.SerializeObject(currentUser));
-        }), (er =>
+            onComplete?.Invoke();
+        }, (er) =>
         {
             Debug.Log(er);
-        }),json);
-        
-        
+            onComplete?.Invoke();
+        }, json);
     }
 
     #endregion

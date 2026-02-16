@@ -82,6 +82,11 @@ public class LoginManager : MonoBehaviour
       UnifiedAuthManager.Instance.LoginWithFacebook();
    }
 
+   public void LoginWithApple()
+   {
+      UnifiedAuthManager.Instance.LoginWithApple();
+   }
+
    public void CopyLoginWithGoogle()
    {
      //UnifiedAuthManager.Instance.CopyPayLoadBuffer();

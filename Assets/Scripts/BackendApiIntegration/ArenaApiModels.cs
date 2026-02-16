@@ -375,9 +375,8 @@ namespace Arena.API.Models
     [Serializable]
     public class PurchaseRequest
     {
-        public string itemId;
-
-        // platform-specific receipt / token
+        public string platform;
+        public string productId;
         public string receipt;
     }
 
@@ -385,7 +384,7 @@ namespace Arena.API.Models
     public class PurchaseResponse
     {
         public bool success;
-        public string message;
+        private WalletBalanceResponse wallet;
     }
 
     // =========================

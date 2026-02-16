@@ -692,6 +692,7 @@ GameObject:
   - component: {fileID: 2330586412755999005}
   - component: {fileID: 2650973834423829160}
   - component: {fileID: 3622997428616280851}
+  - component: {fileID: 4973166401059241655}
   m_Layer: 5
   m_Name: StoreItemPrefab
   m_TagString: Untagged
@@ -779,7 +780,54 @@ MonoBehaviour:
   priceText: {fileID: 1602091131839945311}
   purchaseButton: {fileID: 5264834449492668317}
   itemIcon: {fileID: 1586840027767236916}
+  iapButton: {fileID: 4973166401059241655}
   itemSprites:
   - {fileID: 5905503670755749805, guid: a8ccbc7820eaa09418a5bf18419ac1b1, type: 3}
   - {fileID: 21300000, guid: 47fc8c250e4ac544d98bb1a19556f8c2, type: 3}
   - {fileID: -1646478200747126827, guid: c03dcf4d390f3c64c86e624a8cdf0558, type: 3}
+--- !u!114 &4973166401059241655
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9180521363886121754}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7b79b5624d944058bd39aad2b90fb275, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Purchasing.Codeless::UnityEngine.Purchasing.CodelessIAPButton
+  productId: coins_10m
+  buttonType: 0
+  automaticallyConfirmTransaction: 1
+  onProductFetched:
+    m_PersistentCalls:
+      m_Calls: []
+  onProductFetchFailed:
+    m_PersistentCalls:
+      m_Calls: []
+  onPurchaseFetched:
+    m_PersistentCalls:
+      m_Calls: []
+  onTransactionsRestored:
+    m_PersistentCalls:
+      m_Calls: []
+  onOrderPending:
+    m_PersistentCalls:
+      m_Calls: []
+  onOrderConfirmed:
+    m_PersistentCalls:
+      m_Calls: []
+  onPurchaseFailed:
+    m_PersistentCalls:
+      m_Calls: []
+  onOrderDeferred:
+    m_PersistentCalls:
+      m_Calls: []
+  onPurchaseCompleteLegacy:
+    m_PersistentCalls:
+      m_Calls: []
+  onPurchaseFailedLegacy:
+    m_PersistentCalls:
+      m_Calls: []
+  button: {fileID: 5264834449492668317}
