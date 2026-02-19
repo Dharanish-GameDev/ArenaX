@@ -14,48 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "982688911766-672lotj417geibtdml01ta88tsfm1hia.apps.googleusercontent.com",
+          "client_id": "982688911766-gui07oj4sbbi4gl9677gc7hm1vramhp5.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.alpha.arenax",
-            "certificate_hash": "88c1f2347608eacd50424f94746d8a427c69f433"
-          }
-        },
-        {
-          "client_id": "982688911766-n723nhqprrrhm7et50mblmagqk3d0vue.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyCX6HBxw08RtcjFIgWh7t4X3dkhbnCGLQw"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "982688911766-n723nhqprrrhm7et50mblmagqk3d0vue.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:982688911766:android:d72f76984bfbcc35004db7",
-        "android_client_info": {
-          "package_name": "com.android.arenax"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "982688911766-1fd30qdb75lbgdcjd7e561b2fpshqkrl.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.android.arenax",
-            "certificate_hash": "88c1f2347608eacd50424f94746d8a427c69f433"
+            "certificate_hash": "3c2edb586236e20364f58d1fa9757dca33c94003"
           }
         },
         {
