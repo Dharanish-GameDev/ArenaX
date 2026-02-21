@@ -516,7 +516,7 @@ public class UnifiedAuthManager : MonoBehaviour
             platform = GetPlatformString(),
             email = email,
             name = name,
-            profileImage = 1 // Default profile image
+            profileImage = 1
         };
 
         SendAuthToBackend(request, "apple");

@@ -167,7 +167,7 @@ PlayerSettings:
   androidMinAspectRatio: 1
   applicationIdentifier:
     Android: com.alpha.arenax
-    iPhone: com.alpha.arenax
+    iPhone: com.app.arenax
   buildNumber:
     Standalone: 0
     VisionOS: 0
