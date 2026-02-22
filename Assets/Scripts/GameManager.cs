@@ -50,7 +50,9 @@ public class GameManager : MonoBehaviourPunCallbacks
     // ✅ Local-mode prefabs (UI prefabs, NOT Photon prefabs)
     [Header("Local Mode Piece Prefabs (UI)")]
     [Header("Panels")]
-    [SerializeField] private GameObject bgPanel;   // ✅ assign BG panel here
+    [SerializeField] private GameObject bgPanel;
+
+    [SerializeField] private FriendRequestUIItem friendRequestUIItem;
 
     [SerializeField] private GameObject localRedPiecePrefab;
     [SerializeField] private GameObject localYellowPiecePrefab;
@@ -81,10 +83,10 @@ public class GameManager : MonoBehaviourPunCallbacks
     [Header("UI")]
     [SerializeField] private TextMeshProUGUI statusText;
     [SerializeField] private TextMeshProUGUI winnerText;
-    [SerializeField] private TextMeshProUGUI playerOneNameText;
-    [SerializeField] private TextMeshProUGUI playerTwoNameText;
-    [SerializeField] private Image playerOneIcon;
-    [SerializeField] private Image playerTwoIcon;
+    [SerializeField] private ConnectPlayerUI playerOneUI;
+    [SerializeField] private ConnectPlayerUI playerTwoUI;
+    // [SerializeField] private Image playerOneIcon;
+    // [SerializeField] private Image playerTwoIcon;
 
     [Header("Win Line")]
     [SerializeField] private RectTransform winLineImage;
@@ -130,10 +132,11 @@ public class GameManager : MonoBehaviourPunCallbacks
     private int CellKey(int r, int c) => (r * 1000) + c;
 
     private const string PROP_NAME = "NAME";
+    private const string PROP_UID = "UID";
+    private const string PROP_PFPID = "PFPID";
 
-    private void EnsureLocalNameIsSynced()
+    private void EnsureLocalPlayerDetailsIsSynced()
     {
-        // 1) Always set NickName (Photon syncs this automatically)
         string myName = UnifiedAuthManager.Instance != null
             && UnifiedAuthManager.Instance.GetCurrentUser() != null
             && !string.IsNullOrWhiteSpace(UnifiedAuthManager.Instance.GetCurrentUser().username)
@@ -141,12 +144,12 @@ public class GameManager : MonoBehaviourPunCallbacks
                 : $"Player {PhotonNetwork.LocalPlayer?.ActorNumber ?? 0}";
 
         PhotonNetwork.NickName = myName;
-
-        // 2) Also set a custom player property (extra safety if NickName is empty sometimes)
         if (PhotonNetwork.LocalPlayer != null)
         {
             var props = new Hashtable();
             props[PROP_NAME] = myName;
+            props[PROP_UID] = UnifiedAuthManager.Instance.GetCurrentUser().id;
+            props[PROP_PFPID] = UnifiedAuthManager.Instance.GetCurrentUser().profilePictureIndex.ToString();
             PhotonNetwork.LocalPlayer.SetCustomProperties(props);
         }
     }
@@ -167,25 +170,61 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         return $"Player {p.ActorNumber}";
     }
-
-    private void UpdateMultiplayerNamesUI()
+    
+    private string GetPlayerUID(Photon.Realtime.Player p)
     {
-        if (playerOneNameText == null || playerTwoNameText == null) return;
+        if (p == null) return "";
+
+        if (p.CustomProperties != null &&
+            p.CustomProperties.TryGetValue(PROP_UID, out object v) &&
+            v is string s && !string.IsNullOrWhiteSpace(s))
+            return s;
+        return "";
+    }
+    
+    private string GetPlayerPfpIndex(Photon.Realtime.Player p)
+    {
+        if (p == null) return "";
+
+        if (p.CustomProperties != null &&
+            p.CustomProperties.TryGetValue(PROP_PFPID, out object v) &&
+            v is string s && !string.IsNullOrWhiteSpace(s))
+            return s;
+        return "";
+    }
+
+    private void UpdateMultiplayerPlayerUI()
+    {
         if (!PhotonNetwork.InRoom) return;
 
-        // ✅ stable ordering: Master always shown as Player1
         var master = PhotonNetwork.MasterClient;
 
         Photon.Realtime.Player other = PhotonNetwork.PlayerList
             .FirstOrDefault(p => p != null && master != null && p.ActorNumber != master.ActorNumber);
 
-        playerOneNameText.text = GetPlayerDisplayName(master);
-        playerTwoNameText.text = GetPlayerDisplayName(other);
+        string playerOneName = GetPlayerDisplayName(master);
+        string playerTwoName = GetPlayerDisplayName(other);
+
+        string p1Uid = GetPlayerUID(master);
+        string p2Uid = GetPlayerUID(other);
+
+        string p1PfpIndex = GetPlayerPfpIndex(master);
+        string p2PfpIndex = GetPlayerPfpIndex(other);
+
+        bool isPlayerOneMe = master == PhotonNetwork.LocalPlayer;
+        bool isPlayerTwoMe = other == PhotonNetwork.LocalPlayer;
+
+        playerOneUI.SetPlayerUI(p1Uid, p1PfpIndex, playerOneName, !isPlayerOneMe);
+        playerTwoUI.SetPlayerUI(p2Uid, p2PfpIndex, playerTwoName, !isPlayerTwoMe);
     }
 
 
    
-
+    public void ShowFriendRequestUIItem(string Uid, string profilePic, string name)
+    {
+        friendRequestUIItem.gameObject.SetActive(true);
+        friendRequestUIItem.SetupUIItem(Uid, profilePic, name);
+    }
 
     public void RegisterPiece(int r, int c, Connect4Piece piece)
     {
@@ -264,8 +303,8 @@ public class GameManager : MonoBehaviourPunCallbacks
             {
                 EnsureRoomPropertiesExist();
                 MasterUpdateReadyAndInitTurn();
-                EnsureLocalNameIsSynced();
-                UpdateMultiplayerNamesUI();
+                EnsureLocalPlayerDetailsIsSynced();
+                UpdateMultiplayerPlayerUI();
 
             }
 
@@ -325,22 +364,25 @@ public class GameManager : MonoBehaviourPunCallbacks
     {
         currentMode = GameMode.VsAI;
         BeginLocalMode();
-        playerOneNameText.text = UnifiedAuthManager.Instance.GetCurrentUser().username;
-        playerTwoNameText.text = "AI";
+        // playerOneNameText.text = UnifiedAuthManager.Instance.GetCurrentUser().username;
+        // playerTwoNameText.text = "AI";
         
-        playerOneIcon.sprite = UnifiedAuthManager.Instance.GetProfilePictureForId(UnifiedAuthManager.Instance.GetCurrentUser().profilePictureIndex - 1);
+        playerOneUI.SetPlayerUI("", UnifiedAuthManager.Instance.GetCurrentUser().profilePictureIndex.ToString(), UnifiedAuthManager.Instance.GetCurrentUser().username, false);
+        playerTwoUI.SetPlayerUI("", "2","AI",false);
+        // playerOneIcon.sprite = UnifiedAuthManager.Instance.GetProfilePictureForId(UnifiedAuthManager.Instance.GetCurrentUser().profilePictureIndex - 1);
     }
 
     public void OnMode_PassAndPlay()
     {
         currentMode = GameMode.PassAndPlay;
         BeginLocalMode();
-        playerOneNameText.text = UnifiedAuthManager.Instance.GetCurrentUser().username;
-        playerTwoNameText.text = "PLAYER02";
-
-        playerOneIcon.sprite =
-            UnifiedAuthManager.Instance.GetProfilePictureForId(UnifiedAuthManager.Instance.GetCurrentUser()
-                .profilePictureIndex - 1);
+        // playerOneNameText.text = UnifiedAuthManager.Instance.GetCurrentUser().username;
+        // playerTwoNameText.text = "PLAYER02";
+        playerOneUI.SetPlayerUI("", UnifiedAuthManager.Instance.GetCurrentUser().profilePictureIndex.ToString(), UnifiedAuthManager.Instance.GetCurrentUser().username, false);
+        playerTwoUI.SetPlayerUI("", "2","Player02",false);
+        // playerOneIcon.sprite =
+        //     UnifiedAuthManager.Instance.GetProfilePictureForId(UnifiedAuthManager.Instance.GetCurrentUser()
+        //         .profilePictureIndex - 1);
     }
 
     public void OnMode_Multiplayer()
@@ -472,7 +514,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     {
         // If name changes / arrives late, refresh UI
         if (changedProps != null && changedProps.ContainsKey(PROP_NAME))
-            UpdateMultiplayerNamesUI();
+            UpdateMultiplayerPlayerUI();
     }
 
     private IEnumerator LocalMakeMoveRoutine(int column, int runToken)
@@ -1528,8 +1570,8 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinedRoom()
     {
-        EnsureLocalNameIsSynced();
-        UpdateMultiplayerNamesUI();
+        EnsureLocalPlayerDetailsIsSynced();
+        UpdateMultiplayerPlayerUI();
 
         if (currentMode != GameMode.Multiplayer) return;
 
@@ -1551,7 +1593,7 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     public override void OnPlayerEnteredRoom(Photon.Realtime.Player newPlayer)
     {
-        UpdateMultiplayerNamesUI();
+        UpdateMultiplayerPlayerUI();
 
         if (currentMode != GameMode.Multiplayer) return;
 
@@ -1563,7 +1605,7 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     public override void OnPlayerLeftRoom(Photon.Realtime.Player otherPlayer)
     {
-        UpdateMultiplayerNamesUI();
+        UpdateMultiplayerPlayerUI();
 
         if (currentMode != GameMode.Multiplayer) return;
 
@@ -1585,7 +1627,7 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     public override void OnMasterClientSwitched(Photon.Realtime.Player newMasterClient)
     {
-        UpdateMultiplayerNamesUI();
+        UpdateMultiplayerPlayerUI();
 
         if (currentMode != GameMode.Multiplayer) return;
 

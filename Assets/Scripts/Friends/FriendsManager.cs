@@ -119,7 +119,7 @@ public class FriendsManager : MonoBehaviour
         var requestData = new RespondFriendRequest
         {
             requestId = requestId,
-            action = accept ? "accept" : "reject"
+            action = accept ? "ACCEPTED" : "REJECTED"
         };
 
         string json = JsonConvert.SerializeObject(requestData);

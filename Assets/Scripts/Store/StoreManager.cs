@@ -312,20 +312,20 @@ public class StoreManager : MonoBehaviour
                 
                 try
                 {
-                    // Parse the raw API response
-                    var apiItems = JsonConvert.DeserializeObject<List<StoreApiResponse>>(rawResponse);
+                    // Parse the paginated API response
+                    var paginatedResponse = JsonConvert.DeserializeObject<StorePaginatedResponse>(rawResponse);
                     
-                    if (apiItems != null && apiItems.Count > 0)
+                    if (paginatedResponse != null && paginatedResponse.items != null && paginatedResponse.items.Count > 0)
                     {
-                        // Convert API response to StoreItem objects
-                        var storeItems = ConvertApiResponseToStoreItems(apiItems);
+                        // Convert API response items to StoreItem objects
+                        var storeItems = ConvertApiResponseToStoreItems(paginatedResponse.items);
                         
                         CategorizeItems(storeItems);
                         isInitialized = true;
-                        Debug.Log($"Successfully loaded {storeItems.Count} store items");
+                        Debug.Log($"Successfully loaded {storeItems.Count} store items (page {paginatedResponse.page} of {paginatedResponse.total / paginatedResponse.limit + 1})");
                         OnStoreItemsLoaded?.Invoke();
                     }
-                    else if (apiItems != null && apiItems.Count == 0)
+                    else if (paginatedResponse != null && paginatedResponse.items != null && paginatedResponse.items.Count == 0)
                     {
                         Debug.LogWarning("Store items list is empty (0 items)");
                         OnStoreItemsLoaded?.Invoke();
@@ -339,6 +339,25 @@ public class StoreManager : MonoBehaviour
                 {
                     Debug.LogError($"JSON Parse Error: {je.Message}");
                     Debug.LogError($"Raw response was: {rawResponse}");
+                    
+                    // Try alternate parsing approach - maybe it's a direct array
+                    try
+                    {
+                        Debug.Log("Attempting to parse as direct array...");
+                        var directItems = JsonConvert.DeserializeObject<List<StoreApiItem>>(rawResponse);
+                        if (directItems != null)
+                        {
+                            var storeItems = ConvertApiResponseToStoreItems(directItems);
+                            CategorizeItems(storeItems);
+                            isInitialized = true;
+                            Debug.Log($"Successfully loaded {storeItems.Count} store items (direct array format)");
+                            OnStoreItemsLoaded?.Invoke();
+                        }
+                    }
+                    catch (Exception e2)
+                    {
+                        Debug.LogError($"Alternate parsing also failed: {e2.Message}");
+                    }
                 }
                 catch (Exception e)
                 {
@@ -357,46 +376,66 @@ public class StoreManager : MonoBehaviour
     /// <summary>
     /// Convert API response format to StoreItem format
     /// </summary>
-    private List<StoreItem> ConvertApiResponseToStoreItems(List<StoreApiResponse> apiItems)
+    private List<StoreItem> ConvertApiResponseToStoreItems(List<StoreApiItem> apiItems)
     {
         var storeItems = new List<StoreItem>();
         
         foreach (var apiItem in apiItems)
         {
             var storeItem = new StoreItem();
-            storeItem.id = apiItem.productId;
-            storeItem.price = apiItem.price;
+            storeItem.id = apiItem.productId; // Using productId as the item ID
             
-            // Determine type and quantity based on productId
-            if (apiItem.productId.Contains("coin") || apiItem.productId.Contains("coins"))
+            // Parse price from string to float
+            if (float.TryParse(apiItem.price, out float price))
             {
-                storeItem.type = "coin";
-                storeItem.quantity = apiItem.coins;
-                storeItem.name = $"{FormatNumber(apiItem.coins)} Coins";
-                storeItem.description = $"Purchase {FormatNumber(apiItem.coins)} coins";
-            }
-            else if (apiItem.productId.Contains("diamond") || apiItem.productId.Contains("diamonds"))
-            {
-                storeItem.type = "diamond";
-                storeItem.quantity = apiItem.diamonds;
-                storeItem.name = $"{FormatNumber(apiItem.diamonds)} Diamonds";
-                storeItem.description = $"Purchase {FormatNumber(apiItem.diamonds)} diamonds";
-            }
-            else if (apiItem.productId.Contains("silver"))
-            {
-                storeItem.type = "silver";
-                storeItem.quantity = apiItem.silver;
-                storeItem.name = $"{FormatNumber(apiItem.silver)} Silver";
-                storeItem.description = $"Purchase {FormatNumber(apiItem.silver)} silver";
+                storeItem.price = price;
             }
             else
             {
-                // Default to coins if unknown
-                storeItem.type = "coin";
-                storeItem.quantity = apiItem.coins;
-                storeItem.name = $"{FormatNumber(apiItem.coins)} Coins";
-                storeItem.description = $"Purchase {FormatNumber(apiItem.coins)} coins";
+                storeItem.price = 0f;
+                Debug.LogWarning($"Could not parse price for item {apiItem.productId}: {apiItem.price}");
             }
+            
+            // Parse quantity from string to float
+            if (float.TryParse(apiItem.value, out float quantity))
+            {
+                storeItem.quantity = quantity;
+            }
+            else
+            {
+                storeItem.quantity = 0f;
+                Debug.LogWarning($"Could not parse value for item {apiItem.productId}: {apiItem.value}");
+            }
+            
+            // Set type based on the type field
+            string itemType = apiItem.type.ToLower();
+            storeItem.type = itemType;
+            
+            // Create display name
+            if (itemType == "coins" || itemType == "coin")
+            {
+                storeItem.name = $"{FormatNumber(quantity)} Coins";
+                storeItem.description = $"Purchase {FormatNumber(quantity)} coins";
+            }
+            else if (itemType == "diamonds" || itemType == "diamond")
+            {
+                storeItem.name = $"{FormatNumber(quantity)} Diamonds";
+                storeItem.description = $"Purchase {FormatNumber(quantity)} diamonds";
+            }
+            else if (itemType == "silver")
+            {
+                storeItem.name = $"{FormatNumber(quantity)} Silver";
+                storeItem.description = $"Purchase {FormatNumber(quantity)} silver";
+            }
+            else
+            {
+                // Default fallback
+                storeItem.name = $"{FormatNumber(quantity)} {apiItem.type}";
+                storeItem.description = $"Purchase {FormatNumber(quantity)} {apiItem.type}";
+            }
+            
+            // // Add additional info
+            // storeItem.dailyLimit = apiItem.dailyLimit;
             
             storeItems.Add(storeItem);
         }
@@ -418,16 +457,30 @@ public class StoreManager : MonoBehaviour
     }
 
     /// <summary>
-    /// API Response model matching the actual API
+    /// Paginated response model matching the actual API
     /// </summary>
     [Serializable]
-    private class StoreApiResponse
+    private class StorePaginatedResponse
     {
+        public int page;
+        public int limit;
+        public int total;
+        public List<StoreApiItem> items;
+    }
+
+    /// <summary>
+    /// API Item model matching the actual API structure
+    /// </summary>
+    [Serializable]
+    private class StoreApiItem
+    {
+        public string id;
         public string productId;
-        public float coins;
-        public float diamonds;
-        public float silver;
-        public float price;
+        public string type;
+        public string value;
+        public string price;
+        public int? dailyLimit;
+        public bool status;
     }
 
 #if UNITY_EDITOR
@@ -441,7 +494,7 @@ public class StoreManager : MonoBehaviour
             Debug.Log("<color=yellow>[SIMULATED]</color> Loading simulated store items...");
             
             // Parse the simulated JSON using the API response model
-            var apiItems = JsonConvert.DeserializeObject<List<StoreApiResponse>>(simulatedStoreItemsJson);
+            var apiItems = JsonConvert.DeserializeObject<List<StoreApiItem>>(simulatedStoreItemsJson);
             
             if (apiItems != null)
             {
@@ -511,18 +564,31 @@ public class StoreManager : MonoBehaviour
             Debug.Log("Testing JSON parsing...");
             Debug.Log($"Test JSON: {testJson}");
             
-            var apiItems = JsonConvert.DeserializeObject<List<StoreApiResponse>>(testJson);
+            // Try parsing as paginated response first
+            var paginatedResponse = JsonConvert.DeserializeObject<StorePaginatedResponse>(testJson);
+            if (paginatedResponse != null && paginatedResponse.items != null)
+            {
+                Debug.Log($"Test successful! Parsed paginated response with {paginatedResponse.items.Count} items");
+                foreach (var apiItem in paginatedResponse.items)
+                {
+                    Debug.Log($"Product: {apiItem.productId}, Type: {apiItem.type}, Value: {apiItem.value}, Price: ${apiItem.price}");
+                }
+                return;
+            }
+            
+            // Try parsing as array
+            var apiItems = JsonConvert.DeserializeObject<List<StoreApiItem>>(testJson);
             if (apiItems != null)
             {
-                Debug.Log($"Test successful! Parsed {apiItems.Count} API items");
+                Debug.Log($"Test successful! Parsed {apiItems.Count} API items directly");
                 foreach (var apiItem in apiItems)
                 {
-                    Debug.Log($"Product: {apiItem.productId}, Coins: {apiItem.coins}, Price: ${apiItem.price}");
+                    Debug.Log($"Product: {apiItem.productId}, Type: {apiItem.type}, Value: {apiItem.value}, Price: ${apiItem.price}");
                 }
             }
             else
             {
-                Debug.LogError("Test failed: items is null");
+                Debug.LogError("Test failed: could not parse JSON");
             }
         }
         catch (Exception e)
@@ -543,18 +609,31 @@ public enum StoreCategory
 [CustomEditor(typeof(StoreManager))]
 public class StoreManagerEditor : Editor
 {
-    private string testJson = @"[
-  {
-    ""productId"": ""coins_30m"",
-    ""coins"": 30000000,
-    ""price"": 99
-  },
-  {
-    ""productId"": ""coins_10m"",
-    ""coins"": 10000000,
-    ""price"": 49
-  }
-]";
+    private string testJson = @"{
+  ""page"": 1,
+  ""limit"": 20,
+  ""total"": 4,
+  ""items"": [
+    {
+      ""id"": ""2eb2a1aa-0fde-11f1-be50-767828ab6c2f"",
+      ""productId"": ""diamond_500"",
+      ""type"": ""DIAMOND"",
+      ""value"": ""500"",
+      ""price"": ""14.99"",
+      ""dailyLimit"": 2,
+      ""status"": true
+    },
+    {
+      ""id"": ""2eb348d2-0fde-11f1-be50-767828ab6c2f"",
+      ""productId"": ""silver_10k"",
+      ""type"": ""SILVER"",
+      ""value"": ""10000"",
+      ""price"": ""4.99"",
+      ""dailyLimit"": 2,
+      ""status"": true
+    }
+  ]
+}";
 
     public override void OnInspectorGUI()
     {
@@ -579,7 +658,7 @@ public class StoreManagerEditor : Editor
         
         GUILayout.Space(10);
         GUILayout.Label("Test JSON Input", EditorStyles.boldLabel);
-        testJson = EditorGUILayout.TextArea(testJson, GUILayout.Height(100));
+        testJson = EditorGUILayout.TextArea(testJson, GUILayout.Height(150));
         
         if (GUILayout.Button("Test Custom JSON"))
         {
@@ -592,7 +671,7 @@ public class StoreManagerEditor : Editor
             Debug.Log($"Current items count: {items.Count}");
             foreach (var item in items)
             {
-                Debug.Log($"- {item.name} ({item.id}): ${item.price} - {item.type}");
+                Debug.Log($"- {item.name} ({item.id}): ${item.price} - {item.type} (Qty: {item.quantity})");
             }
         }
     }
