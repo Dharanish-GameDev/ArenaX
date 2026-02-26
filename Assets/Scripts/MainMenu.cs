@@ -15,7 +15,14 @@ public class MainMenu : MonoBehaviour
     [SerializeField] private GameObject dailyRewardsPage;
     [SerializeField] private GameObject coinsStorePage;
     [SerializeField] private GameObject notificationsPage;
-    [SerializeField] private GameObject friendListPage; 
+    [SerializeField] private GameObject friendListPage;
+    [SerializeField] private GameObject settingsPage;
+
+    [Header("Popup")] [Space(5)] 
+    [SerializeField]
+    private GameObject logoutPopup;
+    
+    [Space(10)]
     
     [SerializeField] private TextMeshProUGUI profileName;
     [SerializeField] private Image profileImage;
@@ -69,6 +76,11 @@ public class MainMenu : MonoBehaviour
             {
                 Debug.Log("Store Initialized After Login");
             });
+        };
+        UnifiedAuthManager.Instance.OnLogoutComplete += () =>
+        {
+            loginScreen.SetActive(true);
+            landingPage.SetActive(false);
         };
         
         if(!isLoadedAlready) return;
@@ -223,5 +235,32 @@ public class MainMenu : MonoBehaviour
             landingPage.SetActive(true);
         }
         lastScreen = null;
+    }
+
+    public void ShowSettingsPage()
+    {
+        lastScreen = GetCurrentEnabledScreen();
+        lastScreen.gameObject.SetActive(false);
+        settingsPage.SetActive(true);
+    }
+
+    public void HideSettingsPage()
+    {
+        settingsPage.SetActive(false);
+        if (lastScreen != null)
+        {
+            lastScreen.SetActive(true);
+        }
+        else
+        {
+            landingPage.SetActive(true);
+        }
+        lastScreen = null;
+    }
+
+    public void HideAndShowLogOut()
+    {
+        HideSettingsPage();
+        logoutPopup.gameObject.SetActive(true);
     }
 }

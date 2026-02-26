@@ -91,4 +91,9 @@ public class LoginManager : MonoBehaviour
    {
      //UnifiedAuthManager.Instance.CopyPayLoadBuffer();
    }
+   
+   public void LogOut()
+   {
+      UnifiedAuthManager.Instance.Logout();
+   }
 }
