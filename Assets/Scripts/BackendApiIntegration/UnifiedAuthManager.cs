@@ -145,7 +145,7 @@ public class UnifiedAuthManager : MonoBehaviour
 
     [Header("Parallel Sync Mode")]
     [SerializeField] private AuthRequest parallelSyncAuthRequest;
-    
+
     [Header("Avatars SO")]
     [SerializeField] private AvatarsSO avatarsSO;
     [SerializeField] private Sprite defaultAvatar;
@@ -162,7 +162,7 @@ public class UnifiedAuthManager : MonoBehaviour
     private string currentProvider;
 
     private string socialMediaName = "User";
-    
+
     // Apple Sign-In
     private IAppleAuthManager appleAuthManager;
     private const string AppleUserIdKey = "AppleUserId";
@@ -173,7 +173,7 @@ public class UnifiedAuthManager : MonoBehaviour
         DefaultEditor,
         ParallelSync
     }
-    
+
     private const string PROP_NAME = "NAME";
 
     private void SetPhotonPlayerIdentity(string username)
@@ -281,16 +281,20 @@ public class UnifiedAuthManager : MonoBehaviour
 
     private void InitializeGoogle()
     {
-        if (GoogleSignIn.Configuration == null)
+        string id = (googleWebClientId ?? "").Trim();
+
+        // 🔥 Fix common mistake automatically
+        id = id.Replace("googleusercontentcontent.com", "googleusercontent.com");
+
+        GoogleSignIn.Configuration = new GoogleSignInConfiguration
         {
-            GoogleSignIn.Configuration = new GoogleSignInConfiguration
-            {
-                WebClientId = googleWebClientId,
-                RequestEmail = true,
-                RequestIdToken = true,
-                RequestProfile = true
-            };
-        }
+            WebClientId = id,
+            RequestEmail = true,
+            RequestIdToken = true,
+            RequestProfile = true
+        };
+
+        Debug.Log("[GOOGLE] Config set. WebClientId=" + GoogleSignIn.Configuration.WebClientId);
     }
 
     #endregion
@@ -390,84 +394,84 @@ public class UnifiedAuthManager : MonoBehaviour
         });
     }
 
-   public void LoginWithApple()
-{
+    public void LoginWithApple()
+    {
 #if UNITY_EDITOR
-    if (editorTestMode != EditorTestMode.None)
-    {
-        AuthRequest request = editorTestMode == EditorTestMode.DefaultEditor
-            ? defaultEditorAuthRequest
-            : parallelSyncAuthRequest;
-
-        if (request != null && !string.IsNullOrEmpty(request.idToken))
+        if (editorTestMode != EditorTestMode.None)
         {
-            LoginWithEditorRequest(request);
-            return;
-        }
-    }
-#endif
+            AuthRequest request = editorTestMode == EditorTestMode.DefaultEditor
+                ? defaultEditorAuthRequest
+                : parallelSyncAuthRequest;
 
-    if (appleAuthManager == null)
-    {
-        OnLoginFailed?.Invoke("Apple Sign-In not supported on this platform");
-        return;
-    }
-
-    var loginArgs = new AppleAuthLoginArgs(LoginOptions.IncludeEmail | LoginOptions.IncludeFullName);
-
-    appleAuthManager.LoginWithAppleId(
-        loginArgs,
-        credential =>
-        {
-            var appleIdCredential = credential as IAppleIDCredential;
-            if (appleIdCredential != null)
+            if (request != null && !string.IsNullOrEmpty(request.idToken))
             {
-                HandleAppleSignInSuccess(appleIdCredential);
-            }
-        },
-        error =>
-        {
-            // GetAuthorizationErrorCode returns the enum value directly, not nullable
-            var authorizationErrorCode = error.GetAuthorizationErrorCode();
-            
-            string errorMessage;
-            
-            // Check if it's a user cancellation
-            if (authorizationErrorCode == AuthorizationErrorCode.Canceled)
-            {
-                errorMessage = "Apple Sign-In was cancelled";
-                Debug.Log($"[APPLE] {errorMessage}");
-                // Don't trigger failure callback for user cancellation
+                LoginWithEditorRequest(request);
                 return;
             }
-            
+        }
+#endif
+
+        if (appleAuthManager == null)
+        {
+            OnLoginFailed?.Invoke("Apple Sign-In not supported on this platform");
+            return;
+        }
+
+        var loginArgs = new AppleAuthLoginArgs(LoginOptions.IncludeEmail | LoginOptions.IncludeFullName);
+
+        appleAuthManager.LoginWithAppleId(
+            loginArgs,
+            credential =>
+            {
+                var appleIdCredential = credential as IAppleIDCredential;
+                if (appleIdCredential != null)
+                {
+                    HandleAppleSignInSuccess(appleIdCredential);
+                }
+            },
+            error =>
+            {
+            // GetAuthorizationErrorCode returns the enum value directly, not nullable
+            var authorizationErrorCode = error.GetAuthorizationErrorCode();
+
+                string errorMessage;
+
+            // Check if it's a user cancellation
+            if (authorizationErrorCode == AuthorizationErrorCode.Canceled)
+                {
+                    errorMessage = "Apple Sign-In was cancelled";
+                    Debug.Log($"[APPLE] {errorMessage}");
+                // Don't trigger failure callback for user cancellation
+                return;
+                }
+
             // Handle other error codes
             switch (authorizationErrorCode)
-            {
-                case AuthorizationErrorCode.Unknown:
-                    errorMessage = "Apple Sign-In failed with unknown error";
-                    break;
-                case AuthorizationErrorCode.InvalidResponse:
-                    errorMessage = "Apple Sign-In received invalid response";
-                    break;
-                case AuthorizationErrorCode.NotHandled:
-                    errorMessage = "Apple Sign-In was not handled";
-                    break;
-                case AuthorizationErrorCode.Failed:
-                    errorMessage = "Apple Sign-In failed";
-                    break;
-                case AuthorizationErrorCode.Canceled:
-                    errorMessage = "Apple Sign-In was cancelled";
-                    break; // Already handled above, but keeping for completeness
+                {
+                    case AuthorizationErrorCode.Unknown:
+                        errorMessage = "Apple Sign-In failed with unknown error";
+                        break;
+                    case AuthorizationErrorCode.InvalidResponse:
+                        errorMessage = "Apple Sign-In received invalid response";
+                        break;
+                    case AuthorizationErrorCode.NotHandled:
+                        errorMessage = "Apple Sign-In was not handled";
+                        break;
+                    case AuthorizationErrorCode.Failed:
+                        errorMessage = "Apple Sign-In failed";
+                        break;
+                    case AuthorizationErrorCode.Canceled:
+                        errorMessage = "Apple Sign-In was cancelled";
+                        break; // Already handled above, but keeping for completeness
                 default:
-                    errorMessage = $"Apple Sign-In failed with error code: {authorizationErrorCode}";
-                    break;
-            }
-            
-            Debug.LogError($"[APPLE] {errorMessage}");
-            OnLoginFailed?.Invoke(errorMessage);
-        });
-}
+                        errorMessage = $"Apple Sign-In failed with error code: {authorizationErrorCode}";
+                        break;
+                }
+
+                Debug.LogError($"[APPLE] {errorMessage}");
+                OnLoginFailed?.Invoke(errorMessage);
+            });
+    }
 
     #endregion
 
@@ -478,23 +482,23 @@ public class UnifiedAuthManager : MonoBehaviour
         // Save user ID for potential quick login
         var userId = appleIdCredential.User;
         PlayerPrefs.SetString(AppleUserIdKey, userId);
-    
+
         // Get user info
         string email = appleIdCredential.Email;
         string name = "";
-    
+
         if (appleIdCredential.FullName != null)
         {
             var fullName = appleIdCredential.FullName;
             name = $"{fullName.GivenName} {fullName.FamilyName}".Trim();
-        
+
             if (string.IsNullOrEmpty(name))
                 name = fullName.GivenName ?? fullName.FamilyName ?? "Apple User";
         }
-    
+
         if (string.IsNullOrEmpty(name))
             name = "Apple User";
-        
+
         if (string.IsNullOrEmpty(email))
             email = $"{userId}@apple.private.com"; // Fallback email for private relay
 
@@ -527,18 +531,142 @@ public class UnifiedAuthManager : MonoBehaviour
 
     #region Google Login
 
+
+    private static void LogExceptionDeep(string tag, Exception ex)
+    {
+        if (ex == null)
+        {
+            Debug.LogError($"{tag} EX is NULL");
+            return;
+        }
+
+        // Print full chain safely
+        int depth = 0;
+        Exception cur = ex;
+        while (cur != null && depth < 20)
+        {
+            Debug.LogError($"{tag} [{depth}] {cur.GetType().FullName}: {cur.Message}");
+            cur = cur.InnerException;
+            depth++;
+        }
+
+        // AggregateException: print all inner exceptions
+        if (ex is AggregateException agg)
+        {
+            var flat = agg.Flatten();
+            int i = 0;
+            foreach (var inner in flat.InnerExceptions)
+            {
+                Debug.LogError($"{tag} [AggInner {i}] {inner.GetType().FullName}: {inner.Message}");
+                i++;
+            }
+        }
+    }
+
+    private bool isGoogleSigningIn = false;
+
     private IEnumerator GoogleLoginAndroid()
     {
-        var task = GoogleSignIn.DefaultInstance.SignIn();
-        yield return new WaitUntil(() => task.IsCompleted);
-
-        if (task.IsFaulted || task.IsCanceled)
+        if (isGoogleSigningIn)
         {
-            OnLoginFailed?.Invoke("Google Sign-in failed");
+            Debug.LogWarning("[GOOGLE] SignIn already in progress.");
             yield break;
         }
 
+        isGoogleSigningIn = true;
+
+        // Always apply fresh config
+        string id = (googleWebClientId ?? "").Trim();
+
+        // Auto-fix common typo
+        id = id.Replace("googleusercontentcontent.com", "googleusercontent.com");
+
+        GoogleSignIn.Configuration = new GoogleSignInConfiguration
+        {
+            WebClientId = id,
+            RequestEmail = true,
+            RequestIdToken = true,
+            RequestProfile = true
+        };
+
+        Debug.Log("[GOOGLE] Config set. WebClientId=" + id);
+
+        try { GoogleSignIn.DefaultInstance.SignOut(); } catch { }
+
+        Debug.Log("[GOOGLE] SignIn started...");
+
+        var task = GoogleSignIn.DefaultInstance.SignIn();
+        yield return new WaitUntil(() => task.IsCompleted);
+
+        if (task.IsCanceled)
+        {
+            Debug.LogWarning("[GOOGLE] SignIn CANCELED by user");
+            OnLoginFailed?.Invoke("Google Sign-in cancelled");
+            isGoogleSigningIn = false;
+            yield break;
+        }
+
+        if (task.IsFaulted)
+        {
+            Debug.LogError("[GOOGLE] SignIn FAULTED");
+
+            // Print aggregate + inner exceptions in a Unity-safe way
+            AggregateException agg = task.Exception as AggregateException;
+            Exception[] errors = (agg != null)
+                ? agg.Flatten().InnerExceptions.ToArray()
+                : new Exception[] { task.Exception };
+
+            for (int i = 0; i < errors.Length; i++)
+            {
+                Exception ex = errors[i];
+                if (ex == null) continue;
+
+                Debug.LogError("[GOOGLE] InnerEx[" + i + "] Type: " + ex.GetType().FullName);
+                Debug.LogError("[GOOGLE] InnerEx[" + i + "] Msg : " + ex.Message);
+
+                // Reflection read for Status / StatusCode (works across plugin versions)
+                try
+                {
+                    var t = ex.GetType();
+
+                    var statusProp = t.GetProperty("Status");
+                    if (statusProp != null)
+                    {
+                        var statusVal = statusProp.GetValue(ex, null);
+                        Debug.LogError("[GOOGLE] Status: " + (statusVal == null ? "NULL" : statusVal.ToString()));
+                    }
+
+                    var statusCodeProp = t.GetProperty("StatusCode");
+                    if (statusCodeProp != null)
+                    {
+                        var codeVal = statusCodeProp.GetValue(ex, null);
+                        Debug.LogError("[GOOGLE] StatusCode: " + (codeVal == null ? "NULL" : codeVal.ToString()));
+                    }
+                }
+                catch (Exception reflEx)
+                {
+                    Debug.LogError("[GOOGLE] Reflection read failed: " + reflEx.Message);
+                }
+            }
+
+            var baseEx = task.Exception != null ? task.Exception.GetBaseException() : null;
+            OnLoginFailed?.Invoke(baseEx != null ? baseEx.Message : "Google Sign-in failed");
+
+            isGoogleSigningIn = false;
+            yield break;
+        }
         var user = task.Result;
+
+        Debug.Log($"[GOOGLE] SignIn SUCCESS email={user.Email}, name={user.DisplayName}");
+        Debug.Log("[GOOGLE] IdToken length = " + (user.IdToken == null ? 0 : user.IdToken.Length));
+
+        if (string.IsNullOrEmpty(user.IdToken))
+        {
+            Debug.LogError("[GOOGLE] IdToken is NULL/EMPTY → WebClientId issue.");
+            OnLoginFailed?.Invoke("Missing IdToken (check Web Client ID)");
+            isGoogleSigningIn = false;
+            yield break;
+        }
 
         var request = new AuthRequest
         {
@@ -551,6 +679,8 @@ public class UnifiedAuthManager : MonoBehaviour
         };
 
         SendAuthToBackend(request, "google");
+
+        isGoogleSigningIn = false;
     }
 
     #endregion
@@ -637,9 +767,9 @@ public class UnifiedAuthManager : MonoBehaviour
 
         if (response.user.name == "string" || string.IsNullOrEmpty(response.user.name))
         {
-            UpdateUserName(socialMediaName, () => {});
+            UpdateUserName(socialMediaName, () => { });
         }
-        
+
         OnLoginSuccess?.Invoke(currentUser);
     }
 
@@ -738,9 +868,9 @@ public class UnifiedAuthManager : MonoBehaviour
         request.name = currentUser.username;
         request.contact = currentUser.contact ?? "123456789";
         request.profileImage = index;
-        
+
         string json = JsonConvert.SerializeObject(request);
-        
+
         ApiManager.Instance.SendRequest<UpdatedProfile>(ApiEndPoints.User.PutUserProfile, RequestMethod.PUT, (profile) =>
         {
             currentUser.profilePictureIndex = profile.user.profileImage;
@@ -755,7 +885,7 @@ public class UnifiedAuthManager : MonoBehaviour
 
     public void UpdateUserName(string username, Action onComplete)
     {
-        if (string.IsNullOrEmpty(username)) 
+        if (string.IsNullOrEmpty(username))
         {
             onComplete?.Invoke();
             return;
@@ -765,9 +895,9 @@ public class UnifiedAuthManager : MonoBehaviour
         request.name = username;
         request.contact = currentUser.contact ?? "123456789";
         request.profileImage = currentUser.profilePictureIndex;
-        
+
         string json = JsonConvert.SerializeObject(request);
-        
+
         ApiManager.Instance.SendRequest<UpdatedProfile>(ApiEndPoints.User.PutUserProfile, RequestMethod.PUT, (profile) =>
         {
             currentUser.username = profile.user.name;
@@ -784,4 +914,5 @@ public class UnifiedAuthManager : MonoBehaviour
     }
 
     #endregion
+    
 }
