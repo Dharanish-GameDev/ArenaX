@@ -26,6 +26,7 @@ public class PanelManager : MonoBehaviour
 
     [SerializeField] private GameObject winnerAnnouncementPanel;
     [SerializeField] private GameObject winnerUIObj;
+    [SerializeField] private TextMeshProUGUI rewardCoinsText;
     [SerializeField] private GameObject loserUIObj;
 
     [SerializeField] private Button startMatchButton;
@@ -78,6 +79,8 @@ public class PanelManager : MonoBehaviour
             Debug.Log("I Win");
             winnerUIObj.SetActive(true);
             loserUIObj.SetActive(false);
+            int coins = FindFirstObjectByType<RoomManager>(FindObjectsInactive.Include).CurrentRoomData.coinAmount;
+            rewardCoinsText.text = (coins*2).ToString();
         }
         else
         {
@@ -85,6 +88,8 @@ public class PanelManager : MonoBehaviour
             winnerUIObj.SetActive(false);
             loserUIObj.SetActive(true);
         }
+
+        EconomyManager.Instance.FetchWalletBalance();
     }
 
 

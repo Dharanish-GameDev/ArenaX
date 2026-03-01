@@ -17,10 +17,13 @@ public class MainMenu : MonoBehaviour
     [SerializeField] private GameObject notificationsPage;
     [SerializeField] private GameObject friendListPage;
     [SerializeField] private GameObject settingsPage;
+    
 
     [Header("Popup")] [Space(5)] 
     [SerializeField]
     private GameObject logoutPopup;
+
+    [SerializeField] private WatchAdForCoins watchAdIcon;
     
     [Space(10)]
     
@@ -36,6 +39,7 @@ public class MainMenu : MonoBehaviour
     private GameObject lastScreen;
     
     [SerializeField] private DailyRewardsHandler dailyRewardsHandler;
+    [SerializeField] private GameStatsManager gameStatsManager;
 
 
     private void Awake()
@@ -76,6 +80,8 @@ public class MainMenu : MonoBehaviour
             {
                 Debug.Log("Store Initialized After Login");
             });
+            
+            watchAdIcon.FetchRemainingCountsToWatchAd();
         };
         UnifiedAuthManager.Instance.OnLogoutComplete += () =>
         {
@@ -86,6 +92,8 @@ public class MainMenu : MonoBehaviour
         if(!isLoadedAlready) return;
         SetProfileImage(LoginManager.instance.GetProfilePicture());
         SetProfileName(LoginManager.instance.GetUsername());
+        watchAdIcon.FetchRemainingCountsToWatchAd();
+        EconomyManager.Instance.FetchWalletBalance();
     }
     
 
@@ -122,7 +130,7 @@ public class MainMenu : MonoBehaviour
         lastScreen = GetCurrentEnabledScreen();
         landingPage.SetActive(false);
         profilePage.SetActive(true);
-        // Here I can Make the Api Request
+        gameStatsManager.RefreshStats();
     }
 
     public void HideProfilePage()
@@ -166,6 +174,7 @@ public class MainMenu : MonoBehaviour
     public void ShowCoinsStorePage()
     {
         lastScreen = GetCurrentEnabledScreen();
+        lastScreen.gameObject.SetActive(false);
         profilePage.gameObject.SetActive(false);
         landingPage.SetActive(false);
         coinsStorePage.SetActive(true);
@@ -183,14 +192,7 @@ public class MainMenu : MonoBehaviour
     public void HideCoinsStorePage()
     {
         coinsStorePage.SetActive(false);
-        if (lastScreen != null)
-        {
-            lastScreen.SetActive(true);
-        }
-        else
-        {
-            landingPage.SetActive(true);
-        }
+        landingPage.gameObject.SetActive(true);
         lastScreen = null;
     }
 

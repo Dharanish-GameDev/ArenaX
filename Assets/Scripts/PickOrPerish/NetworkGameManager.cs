@@ -4,7 +4,8 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using Unity.Netcode;
-using Random = UnityEngine.Random;
+using Newtonsoft.Json;
+using Arena.API.Models;
 
 public class NetworkGameManager : NetworkBehaviour
 {
@@ -17,10 +18,9 @@ public class NetworkGameManager : NetworkBehaviour
     [SerializeField] private int countDownSeconds = 3;
 
     private NetworkVariable<int> currentRound = new NetworkVariable<int>(1);
+    public NetworkVariable<int> timer = new NetworkVariable<int>(25);
 
     private List<NetworkPlayer> players = new List<NetworkPlayer>();
-
-    public NetworkVariable<int> timer = new NetworkVariable<int>(25);
 
     public event Action OnTimerEnd;
 
@@ -28,43 +28,36 @@ public class NetworkGameManager : NetworkBehaviour
     private Coroutine countDownCoroutine;
 
     private bool winnerFound = false;
+    public static int defaultLives = 1;
 
-    public static int defaultLives = 3;
+    // 🔥 Backend Tracking
+    private float matchStartTime;
+    private bool resultSentToBackend = false;
+    private List<string> finalWinnerUIDs = new List<string>();
+    private List<string> finalLoserUIDs = new List<string>();
+
+    #region REGISTER VALUE CHANGE EVENTS
+
+    public void RegisterTimerValueChanged(NetworkVariable<int>.OnValueChangedDelegate onValueChanged)
+    {
+        timer.OnValueChanged -= onValueChanged;
+        timer.OnValueChanged += onValueChanged;
+    }
+
+    public void RegisterOnCurrentRoundValueChanged(NetworkVariable<int>.OnValueChangedDelegate onValueChanged)
+    {
+        currentRound.OnValueChanged -= onValueChanged;
+        currentRound.OnValueChanged += onValueChanged;
+    }
+
+    #endregion
 
     private void Awake() => Instance = this;
-    
+
     private void Start()
     {
         NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
         NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
-    }
-
-    private void OnClientDisconnected(ulong obj)
-    {
-        
-    }
-
-    private void OnClientConnected(ulong obj)
-    {
-        if (!NetworkManager.Singleton.IsServer)
-            return;
-
-        int currentPlayers = NetworkManager.Singleton.ConnectedClientsIds.Count;
-
-        Debug.Log($"Client Connected: {obj} | Players: {currentPlayers}/{LobbyManager.Instance.MaxPlayers}");
-        
-        if (currentPlayers > LobbyManager.Instance.MaxPlayers)
-        {
-            Debug.Log("Max players exceeded! Disconnecting client.");
-        
-            NetworkManager.Singleton.DisconnectClient(obj);
-        }
-        
-        if (currentPlayers == LobbyManager.Instance.MaxPlayers)
-        {
-            DisableWaitingUIClientRPC();
-            StartCountDown();   
-        }
     }
 
     private void OnDestroy()
@@ -75,16 +68,54 @@ public class NetworkGameManager : NetworkBehaviour
         NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
     }
 
-    #region Timer
+    private void OnClientDisconnected(ulong obj) 
+    {
+        // Handle player disconnection
+        var disconnectedPlayer = players.FirstOrDefault(p => (ulong)p.GetPlayerID() == obj);
+        if (disconnectedPlayer != null && IsServer)
+        {
+            Debug.Log($"Player {obj} disconnected");
+            disconnectedPlayer.SetPlayerState(PlayerState.Disconnected);
+            CheckForGameOver();
+        }
+    }
+
+    private void OnClientConnected(ulong obj)
+    {
+        if (!IsServer) return;
+
+        int currentPlayers = NetworkManager.Singleton.ConnectedClientsIds.Count;
+
+        if (currentPlayers > LobbyManager.Instance.MaxPlayers)
+        {
+            NetworkManager.Singleton.DisconnectClient(obj);
+        }
+
+        if (currentPlayers == LobbyManager.Instance.MaxPlayers)
+        {
+            DisableWaitingUIClientRPC();
+            StartMatch();
+        }
+    }
+
+    #region MATCH START
+
+    private void StartMatch()
+    {
+        matchStartTime = Time.time;
+        StartCountDown();
+    }
+
+    #endregion
+
+    #region TIMER
+
     public void StartCountDown()
     {
         if (winnerFound) return;
 
         if (countDownCoroutine != null)
-        {
             StopCoroutine(countDownCoroutine);
-            countDownCoroutine = null;
-        }
 
         EnableTimerTextClientRPC();
         countDownCoroutine = StartCoroutine(CountDownCoroutine());
@@ -106,34 +137,27 @@ public class NetworkGameManager : NetworkBehaviour
     [ClientRpc]
     private void FireTimerCountdownEndClientRPC()
     {
-        Debug.Log($"Countdown finished in {countDownSeconds} Secs");
         OnTimerEnd?.Invoke();
     }
 
     [ClientRpc]
-    private void EnableTimerTextClientRPC() => _panelManager.EnableTimerText();
+    private void EnableTimerTextClientRPC()
+        => _panelManager.EnableTimerText();
+
     #endregion
 
-    #region Register
-    public void RegisterTimerValueChanged(NetworkVariable<int>.OnValueChangedDelegate onValueChanged)
-    {
-        timer.OnValueChanged -= onValueChanged;
-        timer.OnValueChanged += onValueChanged;
-    }
-
-    public void RegisterOnCurrentRoundValueChanged(NetworkVariable<int>.OnValueChangedDelegate onValueChanged)
-    {
-        currentRound.OnValueChanged -= onValueChanged;
-        currentRound.OnValueChanged += onValueChanged;
-    }
+    #region REGISTER PLAYERS
 
     public void RegisterMeToTheMatch(NetworkPlayer player)
     {
-        if (!players.Contains(player)) players.Add(player);
+        if (!players.Contains(player))
+            players.Add(player);
     }
+
     #endregion
 
-    #region Submissions
+    #region SUBMISSIONS
+
     private Dictionary<int, int> submittedNumbersDict = new Dictionary<int, int>();
 
     public void SubmittedNumber(int playerId, int currentNumber)
@@ -149,13 +173,8 @@ public class NetworkGameManager : NetworkBehaviour
             activePlayers.Count > 0 &&
             activePlayers.Count == submittedNumbersDict.Count)
         {
-            Debug.Log($"Round Finishing in {countDownSeconds} Secs");
-
             if (countDownCoroutine != null)
-            {
                 StopCoroutine(countDownCoroutine);
-                countDownCoroutine = null;
-            }
 
             FireTimerCountdownEndClientRPC();
             StartCountDownClientRPC(countDownSeconds);
@@ -163,9 +182,10 @@ public class NetworkGameManager : NetworkBehaviour
             Invoke(nameof(AdvanceRound), countDownSeconds);
         }
     }
+
     #endregion
 
-    #region RoundFlow
+    #region ROUND FLOW
 
     private void AdvanceRound()
     {
@@ -179,24 +199,21 @@ public class NetworkGameManager : NetworkBehaviour
 
         if (result != null)
         {
-            // 🔹 PATCHED: get only non-duplicate winners or none
             int[] winners = GetRoundWinners(result, submittedNumbersDict).ToArray();
-
-            if (winners.Length == 0)
-                Debug.Log("❌ No Winner this round (duplicate rule triggered)");
-            else
-                Debug.Log("🏆 Winners: " + string.Join(", ", winners));
-
-            // 🔹 Update UI
             UpdateAfterRoundUIClientRPC(winners, result.calculatedTarget);
 
-            // Apply point changes
             var pointChanges = result.GetPointChanges();
             foreach (var change in pointChanges)
                 playerScores[change.Key] += change.Value;
 
             UpdatePointChanges(playerScores);
-            StartCountDown();
+            
+            // Check for eliminated players before starting next round
+            CheckForEliminatedPlayers();
+            
+            // Only start next round if game hasn't ended
+            if (!winnerFound)
+                StartCountDown();
         }
 
         submittedNumbersDict.Clear();
@@ -205,6 +222,10 @@ public class NetworkGameManager : NetworkBehaviour
     private List<int> GetRoundWinners(RoundResult result, Dictionary<int, int> submissions)
     {
         List<int> winners = new List<int>();
+
+        if (submissions.Count == 0)
+            return winners;
+
         float minDiff = submissions.Min(p => Mathf.Abs(p.Value - result.calculatedTarget));
 
         foreach (var p in submissions)
@@ -218,37 +239,161 @@ public class NetworkGameManager : NetworkBehaviour
 
         return winners;
     }
+
     #endregion
 
-    #region Scoring
+    #region SCORING & GAME OVER
+
     private void UpdatePointChanges(Dictionary<int, int> pointChanges)
     {
         foreach (var change in pointChanges)
         {
             NetworkPlayer player = players.FirstOrDefault(p => p.GetPlayerID() == change.Key);
             if (player != null)
-                player.UpdateCurrentScore(change.Value);
-        }
-
-        // Winner check for 2-player remaining logic (unchanged)
-        if (pointChanges.Count == 2)
-        {
-            var remaining = pointChanges.Where(p => p.Value > 0).Select(p => p.Key).ToList();
-            if (remaining.Count == 1)
             {
-                int winnerId = remaining[0];
-                winnerFound = true;
-                AnnounceWinnerClientRPC(winnerId);
+                player.UpdateCurrentScore(change.Value);
+            }
+        }
+        
+        // Check for game over after score updates
+        CheckForGameOver();
+    }
+
+    private void CheckForEliminatedPlayers()
+    {
+        foreach (var player in players)
+        {
+            // If player score is 0 or less, eliminate them
+            if (player.GetCurrentScore() <= 0 && player.GetCurrentPlayerState() == PlayerState.Active)
+            {
+                Debug.Log($"Player {player.GetPlayerID()} eliminated! Score: {player.GetCurrentScore()}");
+                player.SetPlayerState(PlayerState.Eliminated);
             }
         }
     }
+
+    private void CheckForGameOver()
+    {
+        if (winnerFound) return;
+        
+        var activePlayers = GetActivePlayers();
+        Debug.Log("Active Players: " + activePlayers.Count);
+
+        if (activePlayers.Count == 1)
+        {
+            // One player left - they are the winner
+            winnerFound = true;
+            NetworkPlayer winner = activePlayers[0];
+            
+            Debug.Log($"🏆 Match Over. Winner: Player {winner.GetPlayerID()} with score {winner.GetCurrentScore()}");
+            
+            AnnounceWinnerClientRPC(winner.GetPlayerID());
+            
+            StopAllCoroutines();
+            
+            // Build winner & loser lists
+            finalWinnerUIDs.Clear();
+            finalLoserUIDs.Clear();
+            
+            finalWinnerUIDs.Add(winner.GetBackendUserId());
+            
+            foreach (var p in players)
+            {
+                if (p != winner && p.GetCurrentPlayerState() != PlayerState.Disconnected)
+                {
+                    finalLoserUIDs.Add(p.GetBackendUserId());
+                    Debug.Log($"Loser: Player {p.GetPlayerID()} - {p.GetBackendUserId()}");
+                }
+            }
+            
+            SendMatchResultToBackend();
+        }
+        else if (activePlayers.Count == 0)
+        {
+            // No players left? This should rarely happen, but handle it
+            winnerFound = true;
+            Debug.LogError("No active players left! Something went wrong.");
+        }
+    }
+
     #endregion
 
-    #region Helpers
+    #region BACKEND POST
+
+    private void SendMatchResultToBackend()
+    {
+        if (!IsServer || resultSentToBackend)
+            return;
+
+        resultSentToBackend = true;
+        
+        RoomManager roomManager = FindFirstObjectByType<RoomManager>(FindObjectsInactive.Include);
+        if (roomManager == null) 
+        {
+            Debug.LogError("[MatchResult] RoomManager not found!");
+            return;
+        }
+        
+        int durationSec = Mathf.RoundToInt(Time.time - matchStartTime);
+        string roomId = roomManager.CurrentRoomId;
+        int coinAmount = roomManager.CurrentRoomData != null ? roomManager.CurrentRoomData.coinAmount : 0;
+
+        MatchResultRequest request = new MatchResultRequest
+        {
+            Game = "pick_or_perish",
+            RoomId = roomId,
+            CoinAmount = coinAmount,
+            Winners = new List<PlayerResult>(),
+            Losers = new List<PlayerResult>()
+        };
+
+        foreach (var uid in finalWinnerUIDs)
+        {
+            request.Winners.Add(new PlayerResult
+            {
+                UserId = uid,
+                PlacementId = 1,
+                Kills = 0,
+                DurationSec = durationSec
+            });
+        }
+
+        foreach (var uid in finalLoserUIDs)
+        {
+            request.Losers.Add(new PlayerResult
+            {
+                UserId = uid,
+                PlacementId = 2,
+                Kills = 0,
+                DurationSec = durationSec
+            });
+        }
+
+        string json = JsonConvert.SerializeObject(request, Formatting.Indented);
+
+        Debug.Log("🔥 Sending Match Result:\n" + json);
+
+        ApiManager.Instance.SendRequest<SubmitGameResultResponse>(
+            ApiEndPoints.Games.SubmitResult,
+            RequestMethod.POST,
+            (res) => Debug.Log("✅ Match result sent successfully."),
+            (err) => 
+            {
+                Debug.LogError("❌ Match result failed: " + err);
+                resultSentToBackend = false; // Allow retry
+            },
+            json
+        );
+    }
+
+    #endregion
+
+    #region HELPERS
+
     private Dictionary<int, int> GetPlayerScores()
     {
         Dictionary<int, int> scores = new Dictionary<int, int>();
-        foreach (var p in GetActivePlayers())
+        foreach (var p in players)
             scores[p.GetPlayerID()] = p.GetCurrentScore();
         return scores;
     }
@@ -257,36 +402,26 @@ public class NetworkGameManager : NetworkBehaviour
     {
         return players.Where(p => p.GetCurrentPlayerState() == PlayerState.Active).ToList();
     }
+
     #endregion
 
     #region RPCs
-    [ClientRpc]
-    private void StartCountDownClientRPC(int countDownSeconds)
-        => _panelManager.StartCountdown(countDownSeconds);
 
     [ClientRpc]
-    private void UpdateAfterRoundUIClientRPC(int[] winnerIds, float targetNumber)
-        => _panelManager.UpdateAfterRoundUI(winnerIds, targetNumber);
+    private void StartCountDownClientRPC(int seconds)
+        => _panelManager.StartCountdown(seconds);
+
+    [ClientRpc]
+    private void UpdateAfterRoundUIClientRPC(int[] winnerIds, float target)
+        => _panelManager.UpdateAfterRoundUI(winnerIds, target);
 
     [ClientRpc]
     private void AnnounceWinnerClientRPC(int winnerId)
         => _panelManager.AnnounceWinner(winnerId);
-    
+
     [ClientRpc]
-    private void DisableWaitingUIClientRPC() => _panelManager.DisableWaitingScreen();
-    #endregion
+    private void DisableWaitingUIClientRPC()
+        => _panelManager.DisableWaitingScreen();
 
-    #region DataHandlers
-    
     #endregion
-#if UNITY_EDITOR
-    [Range(1, 10)]
-    [SerializeField] private int roundDebug = 1;
-
-    [ContextMenu("DebugCurrentRound")]
-    private void DebugCurrentRound()
-    {
-        if (IsServer) currentRound.Value = roundDebug;
-    }
-#endif
 }

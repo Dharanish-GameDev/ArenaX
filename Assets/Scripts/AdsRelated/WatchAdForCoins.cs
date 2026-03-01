@@ -1,5 +1,6 @@
 using Arena.API.Models;
 using Newtonsoft.Json;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -7,6 +8,7 @@ public class WatchAdForCoins : MonoBehaviour
 {
     [SerializeField] Button button;
     [SerializeField] private GameObject gotCoinsDebugUI;
+    [SerializeField] private TextMeshProUGUI countText;
     
     #if UNITY_EDITOR
     
@@ -42,7 +44,6 @@ public class WatchAdForCoins : MonoBehaviour
                 return;
             }
 #endif
-            
             ApiManager.Instance.SendRequest(ApiEndPoints.Rewards.WatchAd, RequestMethod.POST,
                 (response) =>
                 {
@@ -65,6 +66,7 @@ public class WatchAdForCoins : MonoBehaviour
         ClaimRewardResponse rewardresponse = JsonConvert.DeserializeObject<ClaimRewardResponse>(response);
         
         Debug.Log(rewardresponse.ToString());
+        FetchRemainingCountsToWatchAd();
         // EconomyManager.Instance.AddEconomy(response.reward.type, response.reward.amount);
         ShowGotCoinsDebugUI();
     }
@@ -78,5 +80,19 @@ public class WatchAdForCoins : MonoBehaviour
     private void HideGotCoinsDebugUI()
     {
         gotCoinsDebugUI?.SetActive(false);
+    }
+
+    public void FetchRemainingCountsToWatchAd()
+    {
+        ApiManager.Instance.SendRequest<WatchAdsCount>(ApiEndPoints.Rewards.AdCount, RequestMethod.GET,(response =>
+        {
+            countText.SetText("x"+response.remainingToday.ToString());
+            gameObject.SetActive(response.remainingToday > 0);
+            Debug.Log(response.remainingToday);
+            
+        }), (er) =>
+        {
+            Debug.Log(er);
+        });
     }
 }

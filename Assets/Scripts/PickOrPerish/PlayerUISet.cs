@@ -24,6 +24,8 @@ public class PlayerUISet : MonoBehaviour
     
     [SerializeField] private GameObject elimitatedObject;
 
+    public string UID => Uid;
+
     private void Awake()
     {
         // numberInput.onValueChanged.AddListener(value =>

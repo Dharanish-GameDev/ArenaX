@@ -40,6 +40,7 @@ public static class ApiEndPoints
         public const string DailyStatus = "/rewards/daily/status";
         public const string ClaimDaily = "/rewards/daily/claim";
         public const string WatchAd = "/rewards/ad";
+        public const string AdCount = "/rewards/ad/count";
     }
 
     public static class Rooms
@@ -66,5 +67,6 @@ public static class ApiEndPoints
         public const string GetUserProfile = "/user/profile";
         public const string PutUserProfile = "/user/profile";
         public const string GetUserList = "/user/list";
+        public const string GetUserStats = "user/stats";
     }
 }

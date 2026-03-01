@@ -428,6 +428,61 @@ namespace Arena.API.Models
         public int profileImage;
     }
     
+    public class WatchAdsCount
+    {
+        public int todayCount;
+        public int lifetimeCount;
+        public int dailyLimit;
+        public int remainingToday;
+    }
+    
+
+    public class MatchResultRequest
+    {
+        [JsonProperty("game")]
+        public string Game { get; set; }
+
+        [JsonProperty("roomId")]
+        public string RoomId { get; set; }
+
+        [JsonProperty("coinAmount")]
+        public int CoinAmount { get; set; }
+
+        [JsonProperty("winners")]
+        public List<PlayerResult> Winners { get; set; }
+
+        [JsonProperty("losers")]
+        public List<PlayerResult> Losers { get; set; }
+    }
+
+    public class PlayerResult
+    {
+        [JsonProperty("userId")]
+        public string UserId { get; set; }
+
+        [JsonProperty("placementId")]
+        public int? PlacementId { get; set; }  // Nullable because losers don't have it
+
+        [JsonProperty("kills")]
+        public int Kills { get; set; }
+
+        [JsonProperty("durationSec")]
+        public int DurationSec { get; set; }
+    }
+    
+    [Serializable]
+    public class GameStatsResponse
+    {
+        public int gameStats;      // Total games played
+        public int gameWon;
+        public int gameLost;
+        public int gameDraw;
+        public int kills;
+        public int fastestGameWon;  // Fastest win time in seconds
+        public int fastestGameLost; // Fastest loss time in seconds
+    }
+
+    
 }
 
 public enum RewardType

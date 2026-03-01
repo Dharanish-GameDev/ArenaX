@@ -14,6 +14,7 @@ public class DailyRewardsHandler : MonoBehaviour
     [SerializeField] private RectTransform[] sevenDaysRewards = new RectTransform[7];
     [SerializeField] private Button claimRewardButton;
     [SerializeField] private TextMeshProUGUI nextClaimText;
+    [SerializeField] private Button homeBtn;
     
     private Dictionary<int,RectTransform> sevenDaysRewardsDict = new Dictionary<int, RectTransform>();
     
@@ -67,6 +68,7 @@ public class DailyRewardsHandler : MonoBehaviour
                     Debug.LogError("[DailyRewards] Failed to parse response");
                     return;
                 }
+                Debug.Log(res);
 
                 Debug.Log($"[DailyRewards] Day={response.currentDay}, CanClaim={response.canClaimToday}, Claimed=[{string.Join(",", response.claimedDays)}]");
 
@@ -169,6 +171,10 @@ public class DailyRewardsHandler : MonoBehaviour
         {
             Debug.Log($"[DailyRewards] Claimed Reward: {response.reward}");
             EconomyManager.Instance.FetchWalletBalance();
+            if (homeBtn != null)
+            {
+                homeBtn.onClick.Invoke();
+            }
         }
 
         FetchRewardsFromServer();

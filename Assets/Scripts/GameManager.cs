@@ -9,6 +9,7 @@ using UnityEngine.UI;
 using ExitGames.Client.Photon;
 using Hashtable = ExitGames.Client.Photon.Hashtable;
 using UnityEngine.SceneManagement;
+using Arena.API.Models;
 
 public enum ConnectType : byte
 {
@@ -39,6 +40,11 @@ public class GameManager : MonoBehaviourPunCallbacks
         yield return new WaitForSeconds(delay);
         ShowEndScreen(winnerAlliance);
     }
+    
+    
+    
+    private bool resultSentToBackend = false;
+    private float matchStartTime;
 
     [SerializeField] private ConnectType connectType;
 
@@ -102,6 +108,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     [SerializeField] private Image endScreenImage;
     [SerializeField] private Sprite youWinSprite;
     [SerializeField] private Sprite youLostSprite;
+    [SerializeField] private TextMeshProUGUI rewardCoinsText;
 
     [Header("Turn Indicator Discs (UI)")]
     [SerializeField] private Image redTurnDisc;
@@ -114,6 +121,8 @@ public class GameManager : MonoBehaviourPunCallbacks
     [SerializeField] private float offAlpha = 0.35f;
     [SerializeField] private Vector2 glowOutlineSize = new Vector2(10f, 10f);
     [SerializeField] private Vector2 offOutlineSize = new Vector2(0f, 0f);
+
+    [SerializeField] private ConnectRoomManager roomManager;
 
     private RectTransform boardSpaceRoot;
     private bool isGameOver;
@@ -134,6 +143,8 @@ public class GameManager : MonoBehaviourPunCallbacks
     private const string PROP_NAME = "NAME";
     private const string PROP_UID = "UID";
     private const string PROP_PFPID = "PFPID";
+    
+    
 
     private void EnsureLocalPlayerDetailsIsSynced()
     {
@@ -572,6 +583,7 @@ public class GameManager : MonoBehaviourPunCallbacks
                     {
                         endScreenImage.sprite = didHumanWin ? youWinSprite : youLostSprite;
                         endScreenImage.preserveAspect = true;
+                        rewardCoinsText.gameObject.SetActive(false);
                     }
                 }
                 endScreenPanel.SetActive(true);
@@ -884,7 +896,147 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         StartCoroutine(ShowEndScreenDelayed(winnerAlliance, 2f));
         localClickLock = false;
+
+        // 🔥 SEND BACKEND RESULT (MASTER ONLY)
+        if (PhotonNetwork.IsMasterClient)
+        {
+            SendMatchResultToBackend(winnerAlliance);
+        }
     }
+    
+   private void SendMatchResultToBackend(PlayerAlliance winnerAlliance)
+{
+    if (resultSentToBackend) return;
+    if (!PhotonNetwork.IsMasterClient) return;
+    if (!PhotonNetwork.InRoom) return;
+
+    resultSentToBackend = true;
+
+    var players = PhotonNetwork.PlayerList;
+    if (players == null || players.Length < 2)
+    {
+        Debug.LogWarning("[MatchResult] Not enough players to send result.");
+        return;
+    }
+
+    // Get RED player (host) and BLUE player (client)
+    Photon.Realtime.Player redPlayer = null;
+    Photon.Realtime.Player bluePlayer = null;
+
+    // Determine which player is which based on your game logic
+    // Assuming MasterClient is RED and the other is BLUE
+    foreach (var player in players)
+    {
+        if (player.IsMasterClient)
+        {
+            redPlayer = player; // Host is RED
+        }
+        else
+        {
+            bluePlayer = player; // Client is BLUE
+        }
+    }
+
+    if (redPlayer == null || bluePlayer == null)
+    {
+        Debug.LogWarning("[MatchResult] Could not identify both players.");
+        return;
+    }
+
+    // Determine winner and loser based on alliance
+    Photon.Realtime.Player winnerPlayer;
+    Photon.Realtime.Player loserPlayer;
+
+    if (winnerAlliance == PlayerAlliance.RED)
+    {
+        winnerPlayer = redPlayer;
+        loserPlayer = bluePlayer;
+    }
+    else // BLUE won
+    {
+        winnerPlayer = bluePlayer;
+        loserPlayer = redPlayer;
+    }
+
+    string winnerUid = GetPlayerUID(winnerPlayer);
+    string loserUid = GetPlayerUID(loserPlayer);
+
+    if (string.IsNullOrEmpty(winnerUid) || string.IsNullOrEmpty(loserUid))
+    {
+        Debug.LogError("[MatchResult] UID missing. Cannot send match result.");
+        resultSentToBackend = false; // Allow retry
+        return;
+    }
+
+    int durationSec = Mathf.RoundToInt(Time.time - matchStartTime);
+
+    // Get game name and coin amount from room manager
+    string gameName = "connect4"; // Default
+    int coinAmount = 1000000; // Default
+    
+    if (roomManager != null)
+    {
+        // Get game name from room manager's setting
+        gameName = roomManager.GameName;
+        
+        // Get coin amount from current room data if available
+        if (roomManager.CurrentRoomData != null)
+        {
+            coinAmount = roomManager.CurrentRoomData.coinAmount;
+        }
+    }
+
+    MatchResultRequest request = new MatchResultRequest
+    {
+        Game = gameName, // Use the game name from roomManager
+        RoomId = roomManager != null ? roomManager.CurrentRoomId : PhotonNetwork.CurrentRoom.Name,
+        CoinAmount = coinAmount,
+        Winners = new System.Collections.Generic.List<PlayerResult>(),
+        Losers = new System.Collections.Generic.List<PlayerResult>()
+    };
+    Debug.Log("CoinAmount: " + coinAmount);
+
+    // Add winner
+    request.Winners.Add(new PlayerResult
+    {
+        UserId = winnerUid,
+        PlacementId = 1, // 1st place
+        Kills = 0, // Not applicable for Connect4
+        DurationSec = durationSec
+    });
+
+    // Add loser
+    request.Losers.Add(new PlayerResult
+    {
+        UserId = loserUid,
+        PlacementId = 2, // 2nd place
+        Kills = 0, // Not applicable for Connect4
+        DurationSec = durationSec
+    });
+
+    string json = Newtonsoft.Json.JsonConvert.SerializeObject(request, Newtonsoft.Json.Formatting.Indented);
+
+    Debug.Log($"[MatchResult] Sending result - Game: {gameName}, Winner: {winnerUid} ({winnerAlliance}), Loser: {loserUid}, Coin: {coinAmount}");
+    Debug.Log("[MatchResult] Payload:\n" + json);
+
+    ApiManager.Instance.SendRequest<object>(
+        ApiEndPoints.Games.SubmitResult,
+        RequestMethod.POST,
+        (res) =>
+        {
+            Debug.Log("[MatchResult] ✅ Match result sent successfully.");
+            EconomyManager.Instance.FetchWalletBalance();
+        },
+        (err) =>
+        {
+            Debug.LogError($"[MatchResult] ❌ Match result failed: {err}");
+            resultSentToBackend = false; // Allow retry if needed
+        },
+        json
+    );
+}
+
+
 
     // NEW: RPC to reset game state for all clients
     [PunRPC]
@@ -947,6 +1099,9 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         endScreenImage.sprite = didLocalWin ? youWinSprite : youLostSprite;
         endScreenImage.preserveAspect = true;
+        rewardCoinsText.gameObject.SetActive(didLocalWin && PhotonNetwork.IsConnected);
+        if(didLocalWin && PhotonNetwork.IsConnected)
+            rewardCoinsText.text = (roomManager.CurrentRoomData.coinAmount*2).ToString(); 
 
         endScreenPanel.SetActive(true);
     }
@@ -1589,6 +1744,11 @@ public class GameManager : MonoBehaviourPunCallbacks
         if (endScreenPanel != null) endScreenPanel.SetActive(false);
         
         UpdateStatus();
+        
+        matchStartTime = Time.time;
+        resultSentToBackend = false;
+        
+        isGameOver = false;
     }
 
     public override void OnPlayerEnteredRoom(Photon.Realtime.Player newPlayer)

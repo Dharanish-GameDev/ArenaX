@@ -18,6 +18,9 @@ public class LobbyManager : MonoBehaviour
     [Header("Networking")]
     [SerializeField] private UnityTransport transport;
     [SerializeField] private NetworkConnectionHandler networkConnectionHandler;
+    
+    [Header("References")]
+    [SerializeField] private RoomManager roomManager;
 
     private Lobby joinedLobby;
     private Lobby hostLobby;
@@ -27,7 +30,7 @@ public class LobbyManager : MonoBehaviour
 
     private const string PLAYER_UID_KEY = "UID";
     private const string PLAYER_NAME_KEY = "NAME";
-    private const string PLAYER_AVATAR_KEY = "1";
+    private const string PLAYER_AVATAR_KEY = "AVATAR";
 
     private bool isHost;
     private bool isGameStarted;
@@ -91,7 +94,9 @@ public class LobbyManager : MonoBehaviour
         }
 
         Instance = this;
-        // DontDestroyOnLoad(gameObject);
+        
+        if (roomManager == null)
+            roomManager = FindObjectOfType<RoomManager>();
     }
 
     private void Update()
@@ -113,23 +118,24 @@ public class LobbyManager : MonoBehaviour
     public void CreateLobbyFromRoom(string roomCode, int maxPlayers)
     {
         this.maxPlayers = maxPlayers;
-        isJoinMatchmaking = false;
+        // isJoinMatchmaking = false;
         CreateLobby(roomCode);
     }
 
     public void JoinLobbyFromRoom(string roomCode)
     {
         JoinLobby(roomCode);
-        isJoinMatchmaking = false;
+        // isJoinMatchmaking = false;
     }
     
-    public void StartQuickMatch(int maxPlayers, Action callback = null)
+    public void StartQuickMatch(int maxPlayers, int coinAmount = 0, Action callback = null)
     {
         this.maxPlayers = maxPlayers;
-        QuickJoinOrCreate();
         isJoinMatchmaking = true;
+        
+        // First try quick join via Unity Lobby
+        QuickJoinOrCreate(coinAmount);
     }
-
 
     // ===================== PLAYER DATA =====================
 
@@ -234,27 +240,46 @@ public class LobbyManager : MonoBehaviour
         }
     }
     
-    private async void QuickJoinOrCreate()
+    private async void QuickJoinOrCreate(int coinAmount)
     {
         if (isJoining) return;
         isJoining = true;
 
         try
         {
+            // Try to quick join an existing Unity Lobby
             joinedLobby = await Lobbies.Instance.QuickJoinLobbyAsync();
             isHost = joinedLobby.HostId == AuthenticationService.Instance.PlayerId;
 
             await UpdateMyPlayerDataAndRefresh();
 
             Debug.Log("[Matchmaking] Quick Joined Lobby");
+            
+            // Now join the backend room using the lobby code
+            if (roomManager != null && joinedLobby.Data != null && joinedLobby.Data.ContainsKey(ROOM_CODE_KEY))
+            {
+                string roomCode = joinedLobby.Data[ROOM_CODE_KEY].Value;
+                Debug.Log($"[Matchmaking] Joining backend room with code: {roomCode}");
+                roomManager.JoinRoom(roomCode);
+            }
         }
         catch (LobbyServiceException e)
         {
             if (e.Reason == LobbyExceptionReason.NoOpenLobbies)
             {
                 Debug.Log("[Matchmaking] No lobby found → Creating new lobby");
-
-                CreateLobby("MM_" + UnityEngine.Random.Range(1000, 9999));
+                
+                // First create backend room
+                if (roomManager != null)
+                {
+                    Debug.Log($"[Matchmaking] Creating backend room with coin: {coinAmount}");
+                    roomManager.CreateRoom("pick_or_perish", coinAmount, maxPlayers);
+                }
+                else
+                {
+                    // Fallback: create lobby directly with random code
+                    CreateLobby("MM_" + UnityEngine.Random.Range(1000, 9999));
+                }
             }
             else
             {
@@ -266,7 +291,6 @@ public class LobbyManager : MonoBehaviour
             isJoining = false;
         }
     }
-
 
     // ===================== START GAME =====================
 
@@ -292,6 +316,24 @@ public class LobbyManager : MonoBehaviour
         catch (Exception e)
         {
             Debug.LogError("[Lobby] StartGame Failed: " + e);
+        }
+    }
+    
+    public async void JoinRelayAfterMigration(string joinCode)
+    {
+        try
+        {
+            JoinAllocation allocation = await Relay.Instance.JoinAllocationAsync(joinCode);
+
+            transport.SetRelayServerData(new RelayServerData(allocation, "dtls"));
+
+            NetworkManager.Singleton.StartClient();
+
+            Debug.Log("🟢 Reconnected to new host.");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("Reconnect failed: " + e);
         }
     }
 
@@ -374,5 +416,31 @@ public class LobbyManager : MonoBehaviour
             heartbeatTimer = HEARTBEAT_INTERVAL;
             await LobbyService.Instance.SendHeartbeatPingAsync(hostLobby.Id);
         }
+    }
+    
+    public async Task<string> RecreateRelayAsHost()
+    {
+        Allocation allocation = await Relay.Instance.CreateAllocationAsync(MaxPlayers);
+        string joinCode = await Relay.Instance.GetJoinCodeAsync(allocation.AllocationId);
+
+        transport.SetRelayServerData(new RelayServerData(allocation, "dtls"));
+
+        NetworkManager.Singleton.StartHost();
+
+        await Lobbies.Instance.UpdateLobbyAsync(CurrentLobby.Id,
+            new UpdateLobbyOptions
+            {
+                Data = new Dictionary<string, DataObject>
+                {
+                    { START_GAME_KEY, new DataObject(DataObject.VisibilityOptions.Member, joinCode) }
+                }
+            });
+
+        return joinCode;
+    }
+
+    public void SetIsMatchMaking(bool flag)
+    {
+        isJoinMatchmaking  = flag;
     }
 }

@@ -27,7 +27,7 @@ public class RoomCreationJoinUI : MonoBehaviour
 
     [Header("Max Players Dropdown Mapping")]
     [Tooltip("Index maps to dropdown option index")]
-    public int[] maxPlayerValues = { 2, 4, 6, 8 };
+    public int[] maxPlayerValues = { 4, 6, 8 };
 
     private bool isJoiningRoom;
 
@@ -65,6 +65,7 @@ public class RoomCreationJoinUI : MonoBehaviour
         isJoiningRoom = false;
         int maxPlayers = GetMaxPlayersFromDropdown();
         roomManager.CreateRoom(gameName, coinAmount, maxPlayers);
+        LobbyManager.Instance.SetIsMatchMaking(false);
     }
     private bool isJoining;
     private void JoinRoom()
@@ -78,6 +79,7 @@ public class RoomCreationJoinUI : MonoBehaviour
 
         isJoiningRoom = true;
         roomManager.JoinRoom(roomCodeInput.text.Trim().ToUpper());
+        LobbyManager.Instance.SetIsMatchMaking(false);
         Invoke(nameof(ResetJoinFlag), 2f);
     }
     private void ResetJoinFlag()

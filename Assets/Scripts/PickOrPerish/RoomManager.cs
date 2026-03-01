@@ -192,6 +192,8 @@ public class RoomManager : MonoBehaviour
         OnRoomError?.Invoke(error);
     }
 
+    
+
     #endregion
 
     #region Debug Simulation

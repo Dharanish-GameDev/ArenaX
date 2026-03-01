@@ -167,6 +167,10 @@ public class UnifiedAuthManager : MonoBehaviour
     private IAppleAuthManager appleAuthManager;
     private const string AppleUserIdKey = "AppleUserId";
 
+    // Google Sign-In
+    private bool isGoogleSigningIn = false;
+    private bool googleInitialized = false;
+
     public enum EditorTestMode
     {
         None,
@@ -281,6 +285,13 @@ public class UnifiedAuthManager : MonoBehaviour
 
     private void InitializeGoogle()
     {
+        // Only initialize if not already configured
+        if (GoogleSignIn.Configuration != null)
+        {
+            Debug.Log("[GOOGLE] Already configured, skipping initialization");
+            return;
+        }
+
         string id = (googleWebClientId ?? "").Trim();
 
         // 🔥 Fix common mistake automatically
@@ -358,27 +369,32 @@ public class UnifiedAuthManager : MonoBehaviour
     #endregion
 
     #region Public Login API
-
-    public void LoginWithGoogle()
-    {
+public void LoginWithGoogle()
+{
 #if UNITY_EDITOR
-        if (editorTestMode != EditorTestMode.None)
-        {
-            AuthRequest request = editorTestMode == EditorTestMode.DefaultEditor
-                ? defaultEditorAuthRequest
-                : parallelSyncAuthRequest;
+    if (editorTestMode != EditorTestMode.None)
+    {
+        AuthRequest request = editorTestMode == EditorTestMode.DefaultEditor
+            ? defaultEditorAuthRequest
+            : parallelSyncAuthRequest;
 
-            if (request != null && !string.IsNullOrEmpty(request.idToken))
-            {
-                LoginWithEditorRequest(request);
-                return;
-            }
+        if (request != null && !string.IsNullOrEmpty(request.idToken))
+        {
+            LoginWithEditorRequest(request);
+            return;
         }
+    }
 #endif
 
-        InitializeGoogle();
-        StartCoroutine(GoogleLoginAndroid());
+    // Reset the signing in flag if it was left true
+    if (isGoogleSigningIn)
+    {
+        Debug.Log("[GOOGLE] Resetting stuck signing in flag");
+        isGoogleSigningIn = false;
     }
+
+    StartCoroutine(GoogleLoginAndroid());
+}
 
     public void LoginWithFacebook()
     {
@@ -431,22 +447,17 @@ public class UnifiedAuthManager : MonoBehaviour
             },
             error =>
             {
-            // GetAuthorizationErrorCode returns the enum value directly, not nullable
-            var authorizationErrorCode = error.GetAuthorizationErrorCode();
-
+                var authorizationErrorCode = error.GetAuthorizationErrorCode();
                 string errorMessage;
 
-            // Check if it's a user cancellation
-            if (authorizationErrorCode == AuthorizationErrorCode.Canceled)
+                if (authorizationErrorCode == AuthorizationErrorCode.Canceled)
                 {
                     errorMessage = "Apple Sign-In was cancelled";
                     Debug.Log($"[APPLE] {errorMessage}");
-                // Don't trigger failure callback for user cancellation
-                return;
+                    return;
                 }
 
-            // Handle other error codes
-            switch (authorizationErrorCode)
+                switch (authorizationErrorCode)
                 {
                     case AuthorizationErrorCode.Unknown:
                         errorMessage = "Apple Sign-In failed with unknown error";
@@ -462,8 +473,8 @@ public class UnifiedAuthManager : MonoBehaviour
                         break;
                     case AuthorizationErrorCode.Canceled:
                         errorMessage = "Apple Sign-In was cancelled";
-                        break; // Already handled above, but keeping for completeness
-                default:
+                        break;
+                    default:
                         errorMessage = $"Apple Sign-In failed with error code: {authorizationErrorCode}";
                         break;
                 }
@@ -479,11 +490,9 @@ public class UnifiedAuthManager : MonoBehaviour
 
     private void HandleAppleSignInSuccess(IAppleIDCredential appleIdCredential)
     {
-        // Save user ID for potential quick login
         var userId = appleIdCredential.User;
         PlayerPrefs.SetString(AppleUserIdKey, userId);
 
-        // Get user info
         string email = appleIdCredential.Email;
         string name = "";
 
@@ -500,9 +509,8 @@ public class UnifiedAuthManager : MonoBehaviour
             name = "Apple User";
 
         if (string.IsNullOrEmpty(email))
-            email = $"{userId}@apple.private.com"; // Fallback email for private relay
+            email = $"{userId}@apple.private.com";
 
-        // Get identity token
         string identityToken = appleIdCredential.IdentityToken != null
             ? Encoding.UTF8.GetString(appleIdCredential.IdentityToken, 0, appleIdCredential.IdentityToken.Length)
             : null;
@@ -531,7 +539,6 @@ public class UnifiedAuthManager : MonoBehaviour
 
     #region Google Login
 
-
     private static void LogExceptionDeep(string tag, Exception ex)
     {
         if (ex == null)
@@ -540,7 +547,6 @@ public class UnifiedAuthManager : MonoBehaviour
             return;
         }
 
-        // Print full chain safely
         int depth = 0;
         Exception cur = ex;
         while (cur != null && depth < 20)
@@ -550,7 +556,6 @@ public class UnifiedAuthManager : MonoBehaviour
             depth++;
         }
 
-        // AggregateException: print all inner exceptions
         if (ex is AggregateException agg)
         {
             var flat = agg.Flatten();
@@ -563,126 +568,136 @@ public class UnifiedAuthManager : MonoBehaviour
         }
     }
 
-    private bool isGoogleSigningIn = false;
-
-    private IEnumerator GoogleLoginAndroid()
+   private IEnumerator GoogleLoginAndroid()
+{
+    if (isGoogleSigningIn)
     {
-        if (isGoogleSigningIn)
-        {
-            Debug.LogWarning("[GOOGLE] SignIn already in progress.");
-            yield break;
-        }
-
-        isGoogleSigningIn = true;
-
-        // Always apply fresh config
-        string id = (googleWebClientId ?? "").Trim();
-
-        // Auto-fix common typo
-        id = id.Replace("googleusercontentcontent.com", "googleusercontent.com");
-
-        GoogleSignIn.Configuration = new GoogleSignInConfiguration
-        {
-            WebClientId = id,
-            RequestEmail = true,
-            RequestIdToken = true,
-            RequestProfile = true
-        };
-
-        Debug.Log("[GOOGLE] Config set. WebClientId=" + id);
-
-        try { GoogleSignIn.DefaultInstance.SignOut(); } catch { }
-
-        Debug.Log("[GOOGLE] SignIn started...");
-
-        var task = GoogleSignIn.DefaultInstance.SignIn();
-        yield return new WaitUntil(() => task.IsCompleted);
-
-        if (task.IsCanceled)
-        {
-            Debug.LogWarning("[GOOGLE] SignIn CANCELED by user");
-            OnLoginFailed?.Invoke("Google Sign-in cancelled");
-            isGoogleSigningIn = false;
-            yield break;
-        }
-
-        if (task.IsFaulted)
-        {
-            Debug.LogError("[GOOGLE] SignIn FAULTED");
-
-            // Print aggregate + inner exceptions in a Unity-safe way
-            AggregateException agg = task.Exception as AggregateException;
-            Exception[] errors = (agg != null)
-                ? agg.Flatten().InnerExceptions.ToArray()
-                : new Exception[] { task.Exception };
-
-            for (int i = 0; i < errors.Length; i++)
-            {
-                Exception ex = errors[i];
-                if (ex == null) continue;
-
-                Debug.LogError("[GOOGLE] InnerEx[" + i + "] Type: " + ex.GetType().FullName);
-                Debug.LogError("[GOOGLE] InnerEx[" + i + "] Msg : " + ex.Message);
-
-                // Reflection read for Status / StatusCode (works across plugin versions)
-                try
-                {
-                    var t = ex.GetType();
-
-                    var statusProp = t.GetProperty("Status");
-                    if (statusProp != null)
-                    {
-                        var statusVal = statusProp.GetValue(ex, null);
-                        Debug.LogError("[GOOGLE] Status: " + (statusVal == null ? "NULL" : statusVal.ToString()));
-                    }
-
-                    var statusCodeProp = t.GetProperty("StatusCode");
-                    if (statusCodeProp != null)
-                    {
-                        var codeVal = statusCodeProp.GetValue(ex, null);
-                        Debug.LogError("[GOOGLE] StatusCode: " + (codeVal == null ? "NULL" : codeVal.ToString()));
-                    }
-                }
-                catch (Exception reflEx)
-                {
-                    Debug.LogError("[GOOGLE] Reflection read failed: " + reflEx.Message);
-                }
-            }
-
-            var baseEx = task.Exception != null ? task.Exception.GetBaseException() : null;
-            OnLoginFailed?.Invoke(baseEx != null ? baseEx.Message : "Google Sign-in failed");
-
-            isGoogleSigningIn = false;
-            yield break;
-        }
-        var user = task.Result;
-
-        Debug.Log($"[GOOGLE] SignIn SUCCESS email={user.Email}, name={user.DisplayName}");
-        Debug.Log("[GOOGLE] IdToken length = " + (user.IdToken == null ? 0 : user.IdToken.Length));
-
-        if (string.IsNullOrEmpty(user.IdToken))
-        {
-            Debug.LogError("[GOOGLE] IdToken is NULL/EMPTY → WebClientId issue.");
-            OnLoginFailed?.Invoke("Missing IdToken (check Web Client ID)");
-            isGoogleSigningIn = false;
-            yield break;
-        }
-
-        var request = new AuthRequest
-        {
-            idToken = user.IdToken,
-            deviceId = deviceId,
-            platform = GetPlatformString(),
-            email = user.Email,
-            name = user.DisplayName,
-            profileImage = 1
-        };
-
-        SendAuthToBackend(request, "google");
-
-        isGoogleSigningIn = false;
+        Debug.LogWarning("[GOOGLE] SignIn already in progress.");
+        yield break;
     }
 
+    isGoogleSigningIn = true;
+
+    // Initialize Google only once
+    if (!googleInitialized)
+    {
+        InitializeGoogle();
+        googleInitialized = true;
+        yield return new WaitForSeconds(0.1f);
+    }
+
+    // Sign out first to clear previous session - this helps show the account picker
+    try
+    {
+        if (GoogleSignIn.DefaultInstance != null)
+        {
+            GoogleSignIn.DefaultInstance.SignOut();
+        }
+    }
+    catch { }
+
+    Debug.Log("[GOOGLE] SignIn started...");
+
+    // Use the standard SignIn method
+    var task = GoogleSignIn.DefaultInstance.SignIn();
+    yield return new WaitUntil(() => task.IsCompleted);
+
+    if (task.IsCanceled)
+    {
+        Debug.LogWarning("[GOOGLE] SignIn CANCELED by user");
+        OnLoginFailed?.Invoke("Google Sign-in cancelled");
+        isGoogleSigningIn = false;
+        yield break;
+    }
+
+    if (task.IsFaulted)
+    {
+        Debug.LogError("[GOOGLE] SignIn FAULTED");
+
+        // Check if this is the "Sign in canceled" error
+        if (task.Exception != null)
+        {
+            string errorMsg = task.Exception.ToString();
+            if (errorMsg.Contains("Canceled") || errorMsg.Contains("cancelled"))
+            {
+                Debug.Log("[GOOGLE] User cancelled the sign-in");
+                isGoogleSigningIn = false;
+                yield break;
+            }
+        }
+
+        // Print aggregate + inner exceptions in a Unity-safe way
+        AggregateException agg = task.Exception as AggregateException;
+        Exception[] errors = (agg != null)
+            ? agg.Flatten().InnerExceptions.ToArray()
+            : new Exception[] { task.Exception };
+
+        for (int i = 0; i < errors.Length; i++)
+        {
+            Exception ex = errors[i];
+            if (ex == null) continue;
+
+            Debug.LogError("[GOOGLE] InnerEx[" + i + "] Type: " + ex.GetType().FullName);
+            Debug.LogError("[GOOGLE] InnerEx[" + i + "] Msg : " + ex.Message);
+
+            // Reflection read for Status / StatusCode (works across plugin versions)
+            try
+            {
+                var t = ex.GetType();
+
+                var statusProp = t.GetProperty("Status");
+                if (statusProp != null)
+                {
+                    var statusVal = statusProp.GetValue(ex, null);
+                    Debug.LogError("[GOOGLE] Status: " + (statusVal == null ? "NULL" : statusVal.ToString()));
+                }
+
+                var statusCodeProp = t.GetProperty("StatusCode");
+                if (statusCodeProp != null)
+                {
+                    var codeVal = statusCodeProp.GetValue(ex, null);
+                    Debug.LogError("[GOOGLE] StatusCode: " + (codeVal == null ? "NULL" : codeVal.ToString()));
+                }
+            }
+            catch (Exception reflEx)
+            {
+                Debug.LogError("[GOOGLE] Reflection read failed: " + reflEx.Message);
+            }
+        }
+
+        var baseEx = task.Exception != null ? task.Exception.GetBaseException() : null;
+        OnLoginFailed?.Invoke(baseEx != null ? baseEx.Message : "Google Sign-in failed");
+
+        isGoogleSigningIn = false;
+        yield break;
+    }
+    
+    var user = task.Result;
+
+    Debug.Log($"[GOOGLE] SignIn SUCCESS email={user.Email}, name={user.DisplayName}");
+    Debug.Log("[GOOGLE] IdToken length = " + (user.IdToken == null ? 0 : user.IdToken.Length));
+
+    if (string.IsNullOrEmpty(user.IdToken))
+    {
+        Debug.LogError("[GOOGLE] IdToken is NULL/EMPTY → WebClientId issue.");
+        OnLoginFailed?.Invoke("Missing IdToken (check Web Client ID)");
+        isGoogleSigningIn = false;
+        yield break;
+    }
+
+    var request = new AuthRequest
+    {
+        idToken = user.IdToken,
+        deviceId = deviceId,
+        platform = GetPlatformString(),
+        email = user.Email,
+        name = user.DisplayName,
+        profileImage = 1
+    };
+
+    SendAuthToBackend(request, "google");
+    isGoogleSigningIn = false;
+}
     #endregion
 
     #region Facebook Login
@@ -727,7 +742,7 @@ public class UnifiedAuthManager : MonoBehaviour
         {
             "google" => ApiEndPoints.Auth.Google,
             "facebook" => ApiEndPoints.Auth.Facebook,
-            "apple" => ApiEndPoints.Auth.Apple, // Make sure this endpoint exists
+            "apple" => ApiEndPoints.Auth.Apple,
             _ => ApiEndPoints.Auth.Google
         };
 
@@ -736,8 +751,6 @@ public class UnifiedAuthManager : MonoBehaviour
             RequestMethod.POST,
             res =>
             {
-                string buffer = AuthRequest.ToDebugString(request);
-                GUIUtility.systemCopyBuffer = buffer;
                 OnBackendAuthSuccess(res, provider);
             },
             err => OnBackendAuthFailed(err, provider),
@@ -796,57 +809,67 @@ public class UnifiedAuthManager : MonoBehaviour
 #endif
     }
 
-    public void Logout()
+   public void Logout()
+{
+    // Provider sign-out
+    try
     {
-        // Provider sign-out
-        try
+        if (GoogleSignIn.DefaultInstance != null)
         {
             GoogleSignIn.DefaultInstance.SignOut();
-            GoogleSignIn.DefaultInstance.Disconnect();
+            // Don't call Disconnect() as it might cause issues
         }
-        catch (Exception e)
-        {
-            Debug.Log($"[AUTH] Google signout skipped/failed: {e.Message}");
-        }
-
-        try
-        {
-            if (FB.IsInitialized && FB.IsLoggedIn)
-                FB.LogOut();
-        }
-        catch (Exception e)
-        {
-            Debug.Log($"[AUTH] Facebook logout skipped/failed: {e.Message}");
-        }
-
-        try
-        {
-            if (firebaseAuth == null) firebaseAuth = FirebaseAuth.DefaultInstance;
-            firebaseAuth.SignOut();
-        }
-        catch (Exception e)
-        {
-            Debug.Log($"[AUTH] Firebase signout skipped/failed: {e.Message}");
-        }
-
-        // Note: Apple Sign-In doesn't have a sign-out method, just clear local data
-
-        // Clear backend session tokens
-        PlayerPrefs.DeleteKey("AccessToken");
-        PlayerPrefs.DeleteKey("RefreshToken");
-        PlayerPrefs.DeleteKey("UserData");
-        PlayerPrefs.Save();
-
-        // Clear API auth header
-        ApiManager.Instance.ClearAuthToken();
-        accessToken = null;
-        refreshToken = null;
-        currentUser = null;
-        currentProvider = null;
-
-        // Notify UI
-        OnLogoutComplete?.Invoke();
     }
+    catch (Exception e)
+    {
+        Debug.Log($"[AUTH] Google signout skipped/failed: {e.Message}");
+    }
+
+    try
+    {
+        if (FB.IsInitialized && FB.IsLoggedIn)
+            FB.LogOut();
+    }
+    catch (Exception e)
+    {
+        Debug.Log($"[AUTH] Facebook logout skipped/failed: {e.Message}");
+    }
+
+    try
+    {
+        if (firebaseAuth == null) firebaseAuth = FirebaseAuth.DefaultInstance;
+        firebaseAuth.SignOut();
+    }
+    catch (Exception e)
+    {
+        Debug.Log($"[AUTH] Firebase signout skipped/failed: {e.Message}");
+    }
+
+    // Clear backend session tokens
+    PlayerPrefs.DeleteKey("AccessToken");
+    PlayerPrefs.DeleteKey("RefreshToken");
+    PlayerPrefs.DeleteKey("UserData");
+    PlayerPrefs.Save();
+
+    // Clear API auth header
+    ApiManager.Instance.ClearAuthToken();
+    accessToken = null;
+    refreshToken = null;
+    currentUser = null;
+    currentProvider = null;
+
+    // Clear any cached Google account
+    PlayerPrefs.DeleteKey("GoogleUserId");
+    PlayerPrefs.DeleteKey("GoogleEmail");
+    PlayerPrefs.Save();
+
+    // Reset flags
+    isGoogleSigningIn = false;
+    // Keep googleInitialized as true to prevent reconfiguration
+
+    // Notify UI
+    OnLogoutComplete?.Invoke();
+}
 
     public UserData GetCurrentUser() => currentUser;
     public bool IsLoggedIn() => currentUser != null;
@@ -864,6 +887,12 @@ public class UnifiedAuthManager : MonoBehaviour
 
     public void UpdateProfilePicture(int index, Action onComplete)
     {
+        if (currentUser == null)
+        {
+            onComplete?.Invoke();
+            return;
+        }
+
         UpdateUserProfileRequest request = new UpdateUserProfileRequest();
         request.name = currentUser.username;
         request.contact = currentUser.contact ?? "123456789";
@@ -885,6 +914,12 @@ public class UnifiedAuthManager : MonoBehaviour
 
     public void UpdateUserName(string username, Action onComplete)
     {
+        if (currentUser == null)
+        {
+            onComplete?.Invoke();
+            return;
+        }
+
         if (string.IsNullOrEmpty(username))
         {
             onComplete?.Invoke();
@@ -901,7 +936,6 @@ public class UnifiedAuthManager : MonoBehaviour
         ApiManager.Instance.SendRequest<UpdatedProfile>(ApiEndPoints.User.PutUserProfile, RequestMethod.PUT, (profile) =>
         {
             currentUser.username = profile.user.name;
-            // Assuming LoginManager exists
             if (LoginManager.instance != null)
                 LoginManager.instance.SetUsername(username);
             PlayerPrefs.SetString("UserData", JsonConvert.SerializeObject(currentUser));
@@ -914,5 +948,4 @@ public class UnifiedAuthManager : MonoBehaviour
     }
 
     #endregion
-    
 }

@@ -22,6 +22,6 @@ public class NetworkConnectionHandler : MonoBehaviour
 
     public void JoinQuickMatch()
     {
-        LobbyManager.Instance.StartQuickMatch(MaxPlayersForQuickMatch);
+        LobbyManager.Instance.StartQuickMatch(MaxPlayersForQuickMatch,1000000);
     }
 }
