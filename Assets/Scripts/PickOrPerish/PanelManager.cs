@@ -17,8 +17,6 @@ public class PanelManager : MonoBehaviour
 
     [SerializeField] private TextMeshProUGUI roundCountText;
 
-    //[SerializeField] private GameObject timerObject;
-    //[SerializeField] private TextMeshProUGUI timeText;
     private Coroutine countdownRoutine;
 
     [SerializeField] private GameObject afterRoundObj;
@@ -37,19 +35,21 @@ public class PanelManager : MonoBehaviour
     [SerializeField] private float winnerAnnouncementDelay = 2f;
     
     [SerializeField] private FriendRequestUIItem friendRequestUIItem;
+    [SerializeField] private TMP_Dropdown quickMatchMaxPlayersCount;
+    public int[] maxPlayerValues = { 4, 6, 8 };
 
 
     private void Awake()
     {
-        // return;
-        // connectionPanel.SetActive(true);
-        // gameplayPanel.SetActive(false);
-        // startMatchButton.gameObject.SetActive(false);
-        // startMatchButton.onClick.AddListener(() =>
-        // {
-        //     startMatchButton.gameObject.SetActive(false);
-        //     NetworkGameManager.Instance.StartCountDown();
-        // });
+         if (quickMatchMaxPlayersCount != null)
+        {
+            quickMatchMaxPlayersCount.onValueChanged.AddListener(OnMaxPlayersDropdownChanged);
+        }
+    }
+
+    public void OnMaxPlayersDropdownChanged(int index)
+    {
+        LobbyManager.Instance.SetMatchmakingMaxPlayers(maxPlayerValues[index]);
     }
 
     private void Start()

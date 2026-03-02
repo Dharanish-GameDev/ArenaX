@@ -25,6 +25,7 @@ public class RoomManager : MonoBehaviour
     private string _currentRoomId;
     private string _currentRoomCode;
     private CreateRoomResponse _currentRoomData;
+    private bool _pendingQuickMatchCreation = false;
 
     public string CurrentRoomId => _currentRoomId;
     public string CurrentRoomCode => _currentRoomCode;
@@ -47,12 +48,14 @@ public class RoomManager : MonoBehaviour
 
     #region Backend API
 
-    public void CreateRoom(string game, int coinAmount, int maxPlayers)
+    public void CreateRoom(string game, int coinAmount, int maxPlayers, bool isQuickMatch = false)
     {
+        _pendingQuickMatchCreation = isQuickMatch;
+        
         #if UNITY_EDITOR
         if (useDebugMode)
         {
-            Debug.Log($"<color=yellow>[DEBUG] CreateRoom: game={game}, coin={coinAmount}, max={maxPlayers}</color>");
+            Debug.Log($"<color=yellow>[DEBUG] CreateRoom: game={game}, coin={coinAmount}, max={maxPlayers}, isQuickMatch={isQuickMatch}</color>");
             SimulateCreateRoom(game, coinAmount, maxPlayers);
             return;
         }
@@ -111,7 +114,6 @@ public class RoomManager : MonoBehaviour
                 response.roomCode = roomCode;
                 OnJoinSuccess(response);
             },
-
             OnJoinError,
             json
         );
@@ -174,6 +176,7 @@ public class RoomManager : MonoBehaviour
     {
         Debug.LogError("[Room] Create Failed: " + error);
         OnRoomError?.Invoke(error);
+        _pendingQuickMatchCreation = false;
     }
 
     private void OnJoinSuccess(CreateRoomResponse response)
@@ -191,8 +194,6 @@ public class RoomManager : MonoBehaviour
         Debug.LogError("[Room] Join Failed: " + error);
         OnRoomError?.Invoke(error);
     }
-
-    
 
     #endregion
 
@@ -232,10 +233,13 @@ public class RoomManager : MonoBehaviour
 
     private void HandleRoomCreated(CreateRoomResponse response)
     {
+        // Pass the pending quick match flag to lobby manager
         lobbyManager.CreateLobbyFromRoom(
             response.roomCode,
-            response.maxPlayers
+            response.maxPlayers,
+            _pendingQuickMatchCreation
         );
+        _pendingQuickMatchCreation = false;
     }
 
     private void HandleRoomJoined(CreateRoomResponse response)
@@ -264,5 +268,6 @@ public class RoomManager : MonoBehaviour
         _currentRoomId = null;
         _currentRoomCode = null;
         _currentRoomData = null;
+        _pendingQuickMatchCreation = false;
     }
 }

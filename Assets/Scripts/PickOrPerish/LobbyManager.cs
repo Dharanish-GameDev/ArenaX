@@ -25,12 +25,18 @@ public class LobbyManager : MonoBehaviour
     private Lobby joinedLobby;
     private Lobby hostLobby;
 
-    private const string START_GAME_KEY = "START_GAME";
-    private const string ROOM_CODE_KEY = "ROOM_CODE";
+    private const string START_GAME_KEY = "START";
+    private const string ROOM_CODE_KEY = "CODE";
+    private const string LOBBY_TYPE_KEY = "TYPE";
+    private const string MAX_PLAYERS_KEY = "MAX";
 
     private const string PLAYER_UID_KEY = "UID";
     private const string PLAYER_NAME_KEY = "NAME";
     private const string PLAYER_AVATAR_KEY = "AVATAR";
+
+    // Lobby types
+    private const string LOBBY_TYPE_QUICKMATCH = "QM";
+    private const string LOBBY_TYPE_FRIENDS = "FR";
 
     private bool isHost;
     private bool isGameStarted;
@@ -115,17 +121,17 @@ public class LobbyManager : MonoBehaviour
 
     // ===================== PUBLIC API =====================
 
-    public void CreateLobbyFromRoom(string roomCode, int maxPlayers)
-    {
-        this.maxPlayers = maxPlayers;
-        // isJoinMatchmaking = false;
-        CreateLobby(roomCode);
-    }
+    public void CreateLobbyFromRoom(string roomCode, int maxPlayers, bool isQuickMatch = false)
+{
+    this.maxPlayers = maxPlayers;
+    string lobbyType = isQuickMatch ? LOBBY_TYPE_QUICKMATCH : LOBBY_TYPE_FRIENDS;
+    Debug.Log($"[LobbyManager] Creating lobby from room - isQuickMatch: {isQuickMatch}, type: {lobbyType}");
+    CreateLobby(roomCode, lobbyType);
+}
 
     public void JoinLobbyFromRoom(string roomCode)
     {
-        JoinLobby(roomCode);
-        // isJoinMatchmaking = false;
+        JoinLobbyByRoomCode(roomCode);
     }
     
     public void StartQuickMatch(int maxPlayers, int coinAmount = 0, Action callback = null)
@@ -133,7 +139,6 @@ public class LobbyManager : MonoBehaviour
         this.maxPlayers = maxPlayers;
         isJoinMatchmaking = true;
         
-        // First try quick join via Unity Lobby
         QuickJoinOrCreate(coinAmount);
     }
 
@@ -165,70 +170,114 @@ public class LobbyManager : MonoBehaviour
 
     // ===================== CREATE LOBBY =====================
 
-    private async void CreateLobby(string roomCode)
+   // ===================== CREATE LOBBY =====================
+
+private async void CreateLobby(string roomCode, string lobbyType)
+{
+    try
     {
-        try
+        // Always include START_GAME_KEY with "0" value
+        var lobbyData = new Dictionary<string, DataObject>
         {
-            var options = new CreateLobbyOptions
-            {
-                IsPrivate = false,
-                Data = new Dictionary<string, DataObject>
-                {
-                    { ROOM_CODE_KEY, new DataObject(DataObject.VisibilityOptions.Public, roomCode) },
-                    { START_GAME_KEY, new DataObject(DataObject.VisibilityOptions.Member, "0") }
-                }
-            };
+            { ROOM_CODE_KEY, new DataObject(DataObject.VisibilityOptions.Public, roomCode) },
+            { LOBBY_TYPE_KEY, new DataObject(DataObject.VisibilityOptions.Public, lobbyType) },
+            { MAX_PLAYERS_KEY, new DataObject(DataObject.VisibilityOptions.Public, maxPlayers.ToString()) },
+            { START_GAME_KEY, new DataObject(DataObject.VisibilityOptions.Member, "0") }
+        };
 
-            hostLobby = await Lobbies.Instance.CreateLobbyAsync(roomCode, maxPlayers, options);
-            joinedLobby = hostLobby;
-            isHost = true;
-
-            await UpdateMyPlayerDataAndRefresh();
-
-            Debug.Log($"[Lobby] Created Lobby | Room: {roomCode}");
-        }
-        catch (Exception e)
+        var options = new CreateLobbyOptions
         {
-            Debug.LogError("[Lobby] Create Failed: " + e);
+            IsPrivate = false,
+            Data = lobbyData
+        };
+
+        string lobbyName = lobbyType == LOBBY_TYPE_QUICKMATCH ? 
+            $"QM_{roomCode}" : roomCode;
+        
+        Debug.Log($"[Lobby] Creating {lobbyType} lobby with data: " +
+                  $"CODE={roomCode}, TYPE={lobbyType}, MAX={maxPlayers}, START=0");
+        
+        hostLobby = await Lobbies.Instance.CreateLobbyAsync(lobbyName, maxPlayers, options);
+        joinedLobby = hostLobby;
+        isHost = true;
+
+        await UpdateMyPlayerDataAndRefresh();
+
+        // Verify the START key was saved
+        if (joinedLobby.Data != null && joinedLobby.Data.ContainsKey(START_GAME_KEY))
+        {
+            Debug.Log($"[Lobby] Verified START key exists with value: {joinedLobby.Data[START_GAME_KEY].Value}");
         }
+        else
+        {
+            Debug.LogError("[Lobby] START key missing after lobby creation!");
+        }
+
+        Debug.Log($"[Lobby] Created {lobbyType} Lobby | Room: {roomCode} | Max Players: {maxPlayers}");
     }
+    catch (Exception e)
+    {
+        Debug.LogError("[Lobby] Create Failed: " + e);
+    }
+}
 
-    // ===================== JOIN LOBBY =====================
+    // ===================== JOIN LOBBY BY ROOM CODE =====================
 
-    private async void JoinLobby(string roomCode)
+    private async void JoinLobbyByRoomCode(string roomCode)
     {
         if (string.IsNullOrWhiteSpace(roomCode) || isJoining) return;
         isJoining = true;
 
         try
         {
-            var response = await Lobbies.Instance.QueryLobbiesAsync(new QueryLobbiesOptions { Count = 25 });
+            // Query all lobbies (we can't filter by custom data directly)
+            var queryOptions = new QueryLobbiesOptions
+            {
+                Count = 25
+                // No filters since we'll filter manually
+            };
 
-            Lobby match = null;
-
+            var response = await Lobbies.Instance.QueryLobbiesAsync(queryOptions);
+            
+            Lobby targetLobby = null;
+            
+            // Manual filtering for friends lobby with matching room code
             foreach (var lobby in response.Results)
             {
-                if (lobby.Data != null &&
-                    lobby.Data.ContainsKey(ROOM_CODE_KEY) &&
-                    lobby.Data[ROOM_CODE_KEY].Value == roomCode)
+                if (lobby.Data != null && 
+                    lobby.Data.ContainsKey(ROOM_CODE_KEY) && 
+                    lobby.Data[ROOM_CODE_KEY].Value == roomCode &&
+                    lobby.Data.ContainsKey(LOBBY_TYPE_KEY) &&
+                    lobby.Data[LOBBY_TYPE_KEY].Value == LOBBY_TYPE_FRIENDS)
                 {
-                    match = lobby;
+                    targetLobby = lobby;
                     break;
                 }
             }
 
-            if (match == null)
+            if (targetLobby == null)
             {
-                Debug.LogError("[Lobby] No lobby found with room code: " + roomCode);
+                // Debug.LogError($"[Lobby] No friends lobby found with room code: {roomCode}");
                 return;
             }
 
-            joinedLobby = await Lobbies.Instance.JoinLobbyByIdAsync(match.Id);
+            // Verify max players
+            if (targetLobby.Data.ContainsKey(MAX_PLAYERS_KEY))
+            {
+                int lobbyMaxPlayers = int.Parse(targetLobby.Data[MAX_PLAYERS_KEY].Value);
+                if (lobbyMaxPlayers != maxPlayers)
+                {
+                    Debug.LogError($"[Lobby] Max players mismatch. Expected: {maxPlayers}, Found: {lobbyMaxPlayers}");
+                    return;
+                }
+            }
+
+            joinedLobby = await Lobbies.Instance.JoinLobbyByIdAsync(targetLobby.Id);
             isHost = joinedLobby.HostId == AuthenticationService.Instance.PlayerId;
 
             await UpdateMyPlayerDataAndRefresh();
 
-            Debug.Log($"[Lobby] Joined Lobby | Room: {roomCode}");
+            Debug.Log($"[Lobby] Joined friends Lobby | Room: {roomCode}");
         }
         catch (Exception e)
         {
@@ -240,58 +289,202 @@ public class LobbyManager : MonoBehaviour
         }
     }
     
-    private async void QuickJoinOrCreate(int coinAmount)
+    // ===================== QUICK JOIN OR CREATE =====================
+
+   // ===================== QUICK JOIN OR CREATE =====================
+
+// ===================== QUICK JOIN OR CREATE =====================
+
+private async void QuickJoinOrCreate(int coinAmount)
+{
+    if (isJoining) return;
+    isJoining = true;
+
+    try
     {
-        if (isJoining) return;
-        isJoining = true;
-
-        try
+        // Query lobbies with available slots
+        var queryOptions = new QueryLobbiesOptions
         {
-            // Try to quick join an existing Unity Lobby
-            joinedLobby = await Lobbies.Instance.QuickJoinLobbyAsync();
-            isHost = joinedLobby.HostId == AuthenticationService.Instance.PlayerId;
+            Count = 25,
+            Filters = new List<QueryFilter>
+            {
+                new QueryFilter(
+                    field: QueryFilter.FieldOptions.AvailableSlots,
+                    op: QueryFilter.OpOptions.GT,
+                    value: "0"
+                )
+            }
+        };
 
-            await UpdateMyPlayerDataAndRefresh();
-
-            Debug.Log("[Matchmaking] Quick Joined Lobby");
+        var response = await Lobbies.Instance.QueryLobbiesAsync(queryOptions);
+        
+        // Log all lobbies found for debugging
+        Debug.Log($"[Matchmaking] Found {response.Results.Count} lobbies with available slots");
+        
+        List<Lobby> potentialLobbies = new List<Lobby>();
+        
+        foreach (var lobby in response.Results)
+        {
+            string lobbyType = "UNKNOWN";
+            string maxPlayersStr = "UNKNOWN";
+            string startGame = "0";
             
-            // Now join the backend room using the lobby code
-            if (roomManager != null && joinedLobby.Data != null && joinedLobby.Data.ContainsKey(ROOM_CODE_KEY))
+            if (lobby.Data != null)
             {
-                string roomCode = joinedLobby.Data[ROOM_CODE_KEY].Value;
-                Debug.Log($"[Matchmaking] Joining backend room with code: {roomCode}");
-                roomManager.JoinRoom(roomCode);
+                if (lobby.Data.ContainsKey(LOBBY_TYPE_KEY))
+                    lobbyType = lobby.Data[LOBBY_TYPE_KEY].Value;
+                    
+                if (lobby.Data.ContainsKey(MAX_PLAYERS_KEY))
+                    maxPlayersStr = lobby.Data[MAX_PLAYERS_KEY].Value;
+                    
+                if (lobby.Data.ContainsKey(START_GAME_KEY))
+                    startGame = lobby.Data[START_GAME_KEY].Value;
+            }
+            
+            Debug.Log($"[Matchmaking] Lobby: {lobby.Name}, Type: {lobbyType}, Max: {maxPlayersStr}, Players: {lobby.Players.Count}/{lobby.MaxPlayers}, Started: {startGame}");
+            
+            // Store all lobbies for later filtering
+            potentialLobbies.Add(lobby);
+        }
+        
+        Lobby eligibleLobby = null;
+        
+        // First pass: try to find lobbies with all keys (preferred)
+        foreach (var lobby in potentialLobbies)
+        {
+            if (lobby.Data == null) continue;
+            
+            // Check if it has all required keys
+            bool hasAllKeys = lobby.Data.ContainsKey(LOBBY_TYPE_KEY) && 
+                              lobby.Data.ContainsKey(MAX_PLAYERS_KEY) && 
+                              lobby.Data.ContainsKey(START_GAME_KEY);
+            
+            if (!hasAllKeys) continue;
+            
+            string lobbyType = lobby.Data[LOBBY_TYPE_KEY].Value;
+            string maxPlayersStr = lobby.Data[MAX_PLAYERS_KEY].Value;
+            string gameStarted = lobby.Data[START_GAME_KEY].Value;
+            
+            // Parse max players
+            if (!int.TryParse(maxPlayersStr, out int lobbyMaxPlayers)) continue;
+            
+            // Check if it's a quick match lobby with matching max players and game hasn't started
+            if (lobbyType == LOBBY_TYPE_QUICKMATCH && 
+                lobbyMaxPlayers == maxPlayers && 
+                gameStarted == "0" &&
+                lobby.AvailableSlots > 0)
+            {
+                eligibleLobby = lobby;
+                Debug.Log($"[Matchmaking] Found eligible lobby (with all keys): {lobby.Name}");
+                break;
             }
         }
-        catch (LobbyServiceException e)
+        
+        // Second pass: if no lobby with all keys, try lobbies missing START key (assume not started)
+        if (eligibleLobby == null)
         {
-            if (e.Reason == LobbyExceptionReason.NoOpenLobbies)
+            foreach (var lobby in potentialLobbies)
             {
-                Debug.Log("[Matchmaking] No lobby found → Creating new lobby");
+                if (lobby.Data == null) continue;
                 
-                // First create backend room
-                if (roomManager != null)
+                // Check if it has at least type and max players
+                bool hasRequiredKeys = lobby.Data.ContainsKey(LOBBY_TYPE_KEY) && 
+                                       lobby.Data.ContainsKey(MAX_PLAYERS_KEY);
+                
+                if (!hasRequiredKeys) continue;
+                
+                string lobbyType = lobby.Data[LOBBY_TYPE_KEY].Value;
+                string maxPlayersStr = lobby.Data[MAX_PLAYERS_KEY].Value;
+                
+                // Parse max players
+                if (!int.TryParse(maxPlayersStr, out int lobbyMaxPlayers)) continue;
+                
+                // Check if it's a quick match lobby with matching max players and has available slots
+                // If START key is missing, assume game hasn't started
+                if (lobbyType == LOBBY_TYPE_QUICKMATCH && 
+                    lobbyMaxPlayers == maxPlayers && 
+                    lobby.AvailableSlots > 0)
                 {
-                    Debug.Log($"[Matchmaking] Creating backend room with coin: {coinAmount}");
-                    roomManager.CreateRoom("pick_or_perish", coinAmount, maxPlayers);
+                    eligibleLobby = lobby;
+                    Debug.Log($"[Matchmaking] Found eligible lobby (missing START key, assuming not started): {lobby.Name}");
+                    break;
                 }
-                else
-                {
-                    // Fallback: create lobby directly with random code
-                    CreateLobby("MM_" + UnityEngine.Random.Range(1000, 9999));
-                }
-            }
-            else
-            {
-                Debug.LogError("[Matchmaking] Failed: " + e);
             }
         }
-        finally
+
+        if (eligibleLobby != null)
         {
-            isJoining = false;
+            // Join existing lobby
+            Debug.Log($"[Matchmaking] Attempting to join lobby: {eligibleLobby.Id} - {eligibleLobby.Name}");
+            
+            try
+            {
+                joinedLobby = await Lobbies.Instance.JoinLobbyByIdAsync(eligibleLobby.Id);
+                isHost = joinedLobby.HostId == AuthenticationService.Instance.PlayerId;
+
+                await UpdateMyPlayerDataAndRefresh();
+
+                Debug.Log($"[Matchmaking] Successfully joined existing quick match lobby with {maxPlayers} players");
+                
+                // Join backend room
+                if (roomManager != null && joinedLobby.Data != null && joinedLobby.Data.ContainsKey(ROOM_CODE_KEY))
+                {
+                    string roomCode = joinedLobby.Data[ROOM_CODE_KEY].Value;
+                    Debug.Log($"[Matchmaking] Joining backend room with code: {roomCode}");
+                    roomManager.JoinRoom(roomCode);
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[Matchmaking] Failed to join lobby: {e.Message}");
+                // If join fails, create new lobby
+                await CreateNewQuickMatchLobby(coinAmount);
+            }
+        }
+        else
+        {
+            await CreateNewQuickMatchLobby(coinAmount);
         }
     }
+    catch (LobbyServiceException e)
+    {
+        Debug.LogError($"[Matchmaking] Failed with error: {e.Message}, Reason: {e.Reason}");
+        await CreateNewQuickMatchLobby(coinAmount);
+    }
+    finally
+    {
+        isJoining = false;
+    }
+}
 
+private async Task CreateNewQuickMatchLobby(int coinAmount)
+{
+    // No eligible lobby found, create new one
+    Debug.Log($"[Matchmaking] No {maxPlayers}-player quick match lobby found → Creating new lobby");
+    
+    // Generate a unique room code
+    string roomCode = UnityEngine.Random.Range(1000, 9999).ToString();
+    
+    // Create backend room with the generated code - PASS true FOR isQuickMatch
+    if (roomManager != null)
+    {
+        Debug.Log($"[Matchmaking] Creating backend room with coin: {coinAmount}, max players: {maxPlayers}, code: {roomCode}");
+        
+        // Set flag that we're in quick match mode
+        isJoinMatchmaking = true;
+        
+        // Create the backend room with quick match flag
+        roomManager.CreateRoom("pick_or_perish", coinAmount, maxPlayers, true);
+        
+        // Note: The lobby will be created when RoomManager calls back to CreateLobbyFromRoom
+        // with isQuickMatch=true, which will create a QM lobby with all required keys
+    }
+    else
+    {
+        // Fallback: create quick match lobby directly
+        CreateLobby(roomCode, LOBBY_TYPE_QUICKMATCH);
+    }
+}
     // ===================== START GAME =====================
 
     public async void StartGame()
@@ -441,6 +634,11 @@ public class LobbyManager : MonoBehaviour
 
     public void SetIsMatchMaking(bool flag)
     {
-        isJoinMatchmaking  = flag;
+        isJoinMatchmaking = flag;
+    }
+
+    public void SetMatchmakingMaxPlayers(int count)
+    {
+        networkConnectionHandler.SetMaxPlayersCount(count);
     }
 }

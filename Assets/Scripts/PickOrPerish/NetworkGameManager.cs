@@ -28,7 +28,7 @@ public class NetworkGameManager : NetworkBehaviour
     private Coroutine countDownCoroutine;
 
     private bool winnerFound = false;
-    public static int defaultLives = 1;
+    public static int defaultLives = 3;
 
     // 🔥 Backend Tracking
     private float matchStartTime;

@@ -183,7 +183,6 @@ public class EconomyManager : MonoBehaviour
             },
             (error) =>
             {
-                Debug.LogError("Wallet Balance Error: " + error);
                 onComplete?.Invoke();
             });
     }
