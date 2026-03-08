@@ -178,7 +178,7 @@ public class MainMenu : MonoBehaviour
         profilePage.gameObject.SetActive(false);
         landingPage.SetActive(false);
         coinsStorePage.SetActive(true);
-        Invoke(nameof(LoadStoreDelay),0.5f);
+        Invoke(nameof(LoadStoreDelay),0.2f);
     }
 
     private void LoadStoreDelay()

@@ -17,7 +17,6 @@ public enum ConnectType : byte
     Connect5
 }
 
-// ✅ Game modes (your 3 buttons)
 public enum GameMode : byte
 {
     VsAI,
@@ -53,7 +52,6 @@ public class GameManager : MonoBehaviourPunCallbacks
     [SerializeField] private GameObject modeSelectPanel;
     [SerializeField] private GameMode currentMode = GameMode.Multiplayer;
 
-    // ✅ Local-mode prefabs (UI prefabs, NOT Photon prefabs)
     [Header("Local Mode Piece Prefabs (UI)")]
     [Header("Panels")]
     [SerializeField] private GameObject bgPanel;
@@ -1062,33 +1060,36 @@ public class GameManager : MonoBehaviourPunCallbacks
         UpdateStatus();
     }
 
-    public void OnHomePressed()
-    {
-        // ✅ cancel local routines to avoid MissingReferenceException during scene change
-        CancelLocalCoroutines();
+   public void OnHomePressed()
+{
+    CancelLocalCoroutines();
 
-        if (PhotonNetwork.InRoom)
-        {
-            PhotonNetwork.RemoveRPCs(photonView);
-            PhotonNetwork.LeaveRoom();
-        }
-        else
-        {
-            LoadHomeScene();
-        }
+    if (PhotonNetwork.InRoom)
+    {
+        PhotonNetwork.RemoveRPCs(photonView);
+        PhotonNetwork.LeaveRoom(); // wait for callback
     }
-
-    public override void OnLeftRoom()
+    else
     {
-        // If we left because we picked local mode, do NOT force home.
-        if (currentMode == GameMode.VsAI || currentMode == GameMode.PassAndPlay) return;
+        PhotonNetwork.Disconnect();
         LoadHomeScene();
     }
+}
 
-    private void LoadHomeScene()
-    {
-        SceneManager.LoadScene("MainMenu");
-    }
+public override void OnLeftRoom()
+{
+    PhotonNetwork.Disconnect(); // disconnect AFTER leaving
+
+    // If we left because we picked local mode, do NOT force home.
+    if (currentMode == GameMode.VsAI || currentMode == GameMode.PassAndPlay) return;
+
+    LoadHomeScene();
+}
+
+private void LoadHomeScene()
+{
+    SceneManager.LoadScene("MainMenu");
+}
 
     private void ShowEndScreen(PlayerAlliance winnerAlliance)
     {
@@ -1099,9 +1100,11 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         endScreenImage.sprite = didLocalWin ? youWinSprite : youLostSprite;
         endScreenImage.preserveAspect = true;
-        rewardCoinsText.gameObject.SetActive(didLocalWin && PhotonNetwork.IsConnected);
+        rewardCoinsText.gameObject.SetActive(PhotonNetwork.IsConnected);
         if(didLocalWin && PhotonNetwork.IsConnected)
-            rewardCoinsText.text = (roomManager.CurrentRoomData.coinAmount*2).ToString(); 
+            rewardCoinsText.text = "+"+(roomManager.CurrentRoomData.coinAmount*2).ToString();
+        else if(!didLocalWin && PhotonNetwork.IsConnected)
+        rewardCoinsText.text = "-" + roomManager.CurrentRoomData.coinAmount.ToString(); 
 
         endScreenPanel.SetActive(true);
     }

@@ -357,9 +357,15 @@ namespace Arena.API.Models
         public string roomId;
     }
 
+    public class JoinRoomResponse
+    {
+        public string roomCode;
+    }
+
     // =========================
     // Store
     // =========================
+
 
     [Serializable]
     public class StoreItem
@@ -369,9 +375,18 @@ namespace Arena.API.Models
         public string description;
         public float price;
         public string type;
-        public float quantity; // Add this field
+        public float quantity;
+        
+        // For IAP integration
+        public string productId; // Maps to the IAP product ID
+        
+        // Runtime properties (not serialized)
+        public string localizedPriceString;
+        public string currencyCode;
+        public string currencySymbol;
+        public bool status;
+        public int? dailyLimit;
     }
-    
     [Serializable]
     public class PurchaseRequest
     {

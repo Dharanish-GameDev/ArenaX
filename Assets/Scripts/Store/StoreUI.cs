@@ -1,8 +1,7 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 using Arena.API.Models;
-using UnityEngine.Purchasing;
+using UnityEngine.UI;
 
 public class StoreUI : MonoBehaviour
 {
@@ -11,10 +10,10 @@ public class StoreUI : MonoBehaviour
     [SerializeField] private Transform diamondContainer;
     [SerializeField] private Transform silverContainer;
 
-    [Header("Single Prefab")]
+    [Header("Prefab")]
     [SerializeField] private GameObject storeItemPrefab;
 
-    [Header("UI Elements")]
+    [Header("UI")]
     [SerializeField] private GameObject loadingPanel;
     [SerializeField] private GameObject errorPanel;
     [SerializeField] private TMPro.TextMeshProUGUI errorText;
@@ -26,20 +25,28 @@ public class StoreUI : MonoBehaviour
 
     private void InitializeStoreUI()
     {
-        errorPanel.SetActive(false);
+        if (loadingPanel != null)
+            loadingPanel.SetActive(true);
+
+        if (errorPanel != null)
+            errorPanel.SetActive(false);
 
         StoreManager.Instance.OnStoreItemsLoaded += OnStoreItemsLoaded;
         StoreManager.Instance.OnItemPurchased += OnItemPurchased;
         StoreManager.Instance.OnPurchaseFailed += OnPurchaseFailed;
 
-        // StoreManager.Instance.InitializeStore();
+        // IMPORTANT: Load store items
+        StoreManager.Instance.InitializeStore();
     }
 
     private void OnStoreItemsLoaded()
     {
-        loadingPanel.SetActive(false);
+        if (loadingPanel != null)
+            loadingPanel.SetActive(false);
+
         PopulateAllContainers();
-        Debug.Log("On Store Items Loaded!!!");
+
+        Debug.Log("Store Items Loaded!");
     }
 
     private void PopulateAllContainers()
@@ -51,16 +58,33 @@ public class StoreUI : MonoBehaviour
 
     private void PopulateContainer(StoreCategory category, Transform container)
     {
-        if (container == null || storeItemPrefab == null) return;
+        if (container == null)
+        {
+            Debug.LogWarning($"Container missing for {category}");
+            return;
+        }
 
-        foreach (Transform child in container)
+        if (storeItemPrefab == null)
+        {
+            Debug.LogError("Store Item Prefab not assigned!");
+            return;
+        }
+
+        Transform parent = container;
+        if(parent.TryGetComponent(out ScrollRect rect))
+        {
+            parent = rect.content;
+        }
+
+        // Clear old items
+        foreach (Transform child in parent)
         {
             Destroy(child.gameObject);
         }
 
         var items = StoreManager.Instance.GetStoreItemsByCategory(category);
-        
-        if (items.Count == 0)
+
+        if (items == null || items.Count == 0)
         {
             Debug.Log($"No items found for category: {category}");
             return;
@@ -68,19 +92,28 @@ public class StoreUI : MonoBehaviour
 
         foreach (var item in items)
         {
-            var itemGO = Instantiate(storeItemPrefab, container);
-            var storeItemUI = itemGO.GetComponent<StoreItemUI>();
-            storeItemUI.name = item.name;
+            if(item.productId == "coins_1m") continue;
+            GameObject itemGO = Instantiate(storeItemPrefab, parent);
+
+            StoreItemUI storeItemUI = itemGO.GetComponent<StoreItemUI>();
+
             if (storeItemUI != null)
             {
                 storeItemUI.Initialize(item);
+            }
+            else
+            {
+                Debug.LogError("StoreItemUI component missing on prefab!");
             }
         }
     }
 
     private void OnItemPurchased(StoreItem item)
     {
+        Debug.Log($"Item purchased: {item.name}");
+
         var category = StoreManager.Instance.GetCategoryFromType(item.type);
+
         RefreshCategoryContainer(category);
     }
 
@@ -91,9 +124,11 @@ public class StoreUI : MonoBehaviour
             case StoreCategory.Coin:
                 PopulateContainer(category, coinContainer);
                 break;
+
             case StoreCategory.Diamond:
                 PopulateContainer(category, diamondContainer);
                 break;
+
             case StoreCategory.Silver:
                 PopulateContainer(category, silverContainer);
                 break;
@@ -102,20 +137,30 @@ public class StoreUI : MonoBehaviour
 
     private void OnPurchaseFailed(string errorMessage)
     {
-        errorPanel.SetActive(true);
-        errorText.text = $"Purchase Failed:\n{errorMessage}";
+        Debug.LogError($"Purchase Failed: {errorMessage}");
+
+        if (errorPanel != null)
+            errorPanel.SetActive(true);
+
+        if (errorText != null)
+            errorText.text = $"Purchase Failed:\n{errorMessage}";
     }
 
     public void OnRetryButtonClicked()
     {
-        errorPanel.SetActive(false);
-        loadingPanel.SetActive(true);
+        if (errorPanel != null)
+            errorPanel.SetActive(false);
+
+        if (loadingPanel != null)
+            loadingPanel.SetActive(true);
+
         StoreManager.Instance.RefreshStoreItems();
     }
 
     public void OnCloseErrorButtonClicked()
     {
-        errorPanel.SetActive(false);
+        if (errorPanel != null)
+            errorPanel.SetActive(false);
     }
 
     private void OnDestroy()

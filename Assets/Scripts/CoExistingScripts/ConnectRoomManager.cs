@@ -56,12 +56,19 @@ public class ConnectRoomManager : MonoBehaviour
             roomCode = roomCode,
         };
         
+        string rc = roomCode;
+
         string json = JsonConvert.SerializeObject(request);
 
-        ApiManager.Instance.SendRequest<CreateRoomResponse>(
+        ApiManager.Instance.SendRequest<MessageResponse>(
             ApiEndPoints.Rooms.Join,
             RequestMethod.POST,
-            OnJoinRoomSuccess,
+            (res)=>
+            {
+                JoinRoomResponse joinRoomResponse = new();
+                joinRoomResponse.roomCode = rc;
+                OnJoinRoomSuccess(joinRoomResponse);
+            },
             OnApiError,
             json
         );
@@ -114,15 +121,21 @@ public class ConnectRoomManager : MonoBehaviour
         OnRoomCreated?.Invoke(response);
     }
 
-    private void OnJoinRoomSuccess(CreateRoomResponse response)
+    private void OnJoinRoomSuccess(JoinRoomResponse response)
     {
-        Debug.Log($"[ConnectRoomManager] Room joined: {response.roomCode} (ID: {response.roomId})");
+        Debug.Log($"[ConnectRoomManager] Room joined: {response.roomCode}");
         
-        _currentRoomId = response.roomId;
-        _currentRoomCode = response.roomCode;
-        _currentRoomData = response;
+        CreateRoomResponse createRoomResponse = new CreateRoomResponse();
+        createRoomResponse.roomCode = response.roomCode;
 
-        OnRoomJoined?.Invoke(response);
+        // _currentRoomId = response.roomId;
+        _currentRoomCode = response.roomCode;
+        _currentRoomData = createRoomResponse;
+
+        // Harcoding for Coins Amount
+        _currentRoomData.coinAmount = 1000000;
+
+        OnRoomJoined?.Invoke(createRoomResponse);
     }
 
     private void OnApiError(string error)

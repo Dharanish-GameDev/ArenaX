@@ -25,14 +25,25 @@ public class StoreItemUI : MonoBehaviour
         currentItem = item;
 
         itemNameText.text = item.name;
-        descriptionText.text = item.description;
+        if(item.dailyLimit.HasValue)
+        {
+            descriptionText.text =  $"Daily Limit {item.dailyLimit.Value} times";
+            purchaseButton.interactable = item.dailyLimit.Value > 0;
+        }
+        else
+        {
+            descriptionText.text = "Unlimited times";
+        }
+        
+        // Use the formatted price from StoreManager
         priceText.text = StoreManager.Instance.FormatPrice(item);
 
         SetItemSprite(item);
         
         if (iapButton != null)
         {
-            iapButton.productId =  item.id;
+            // IMPORTANT: Use productId for IAP, not the internal id
+            iapButton.productId = item.productId; // This should be "coins_100m", not a GUID
             iapButton.onOrderConfirmed.AddListener(OnOrderConfirmed);
         }
     }
@@ -40,16 +51,21 @@ public class StoreItemUI : MonoBehaviour
     private void OnOrderConfirmed(ConfirmedOrder order)
     {
         string receipt = order.Info.Receipt;
-        string productId = currentItem.id;
+        string productId = currentItem.productId; // Use productId for the purchase
         
-        StoreManager.Instance.PurchaseItem(productId, receipt , (response =>
+        StoreManager.Instance.PurchaseItem(productId, receipt, (response) =>
         {
-            if (response.success)
+            if (response != null && response.success)
             {
-                Debug.Log(productId +" Purchased");
+                Debug.Log($"{productId} Purchased successfully");
                 EconomyManager.Instance.FetchWalletBalance();
+                StoreManager.Instance.RefreshStoreItems();
             }
-        }));
+            else
+            {
+                Debug.LogError($"Purchase failed for {productId}");
+            }
+        });
     }
 
     private void SetItemSprite(StoreItem item)
@@ -57,13 +73,22 @@ public class StoreItemUI : MonoBehaviour
         if (itemIcon == null || itemSprites == null || itemSprites.Length == 0) return;
 
         int spriteIndex = 0;
+        string type = item.type.ToLower();
         
-        if (item.type.Contains("coin")) spriteIndex = 0;
-        else if (item.type.Contains("diamond")) spriteIndex = 1;
-        else if (item.type.Contains("silver")) spriteIndex = 2;
+        if (type.Contains("coin")) spriteIndex = 0;
+        else if (type.Contains("diamond")) spriteIndex = 1;
+        else if (type.Contains("silver")) spriteIndex = 2;
         
         spriteIndex = Mathf.Clamp(spriteIndex, 0, itemSprites.Length - 1);
         
         itemIcon.sprite = itemSprites[spriteIndex];
+    }
+
+    private void OnDestroy()
+    {
+        if (iapButton != null)
+        {
+            iapButton.onOrderConfirmed.RemoveListener(OnOrderConfirmed);
+        }
     }
 }
